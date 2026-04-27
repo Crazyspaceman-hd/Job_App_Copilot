@@ -703,3 +703,160 @@ def delete_evidence(item_id: int):
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Evidence item {item_id} not found")
     return {"ok": True, "item_id": item_id}
+
+
+# ── Candidate Assessments ──────────────────────────────────────────────────────
+
+class AssessmentOut(BaseModel):
+    id:                   int
+    created_at:           str
+    updated_at:           str
+    source_type:          str
+    source_label:         Optional[str]       = None
+    assessment_kind:      str
+    raw_text:             str
+    strengths:            list[str]
+    growth_areas:         list[str]
+    demonstrated_skills:  list[str]
+    demonstrated_domains: list[str]
+    work_style:           Optional[str]       = None
+    role_fit:             Optional[str]       = None
+    confidence:           Optional[str]       = None
+    allowed_uses:         list[str]
+    is_preferred:         bool
+    profile_id:           Optional[int]       = None
+
+
+class AssessmentIn(BaseModel):
+    source_type:          str        = "manual"
+    source_label:         Optional[str]       = None
+    assessment_kind:      str        = "working_assessment"
+    raw_text:             str        = ""
+    strengths:            list[str]  = []
+    growth_areas:         list[str]  = []
+    demonstrated_skills:  list[str]  = []
+    demonstrated_domains: list[str]  = []
+    work_style:           Optional[str]       = None
+    role_fit:             Optional[str]       = None
+    confidence:           Optional[str]       = None
+    allowed_uses:         list[str]  = []
+    profile_id:           Optional[int]       = None
+
+
+def _assessment_out(a) -> AssessmentOut:
+    return AssessmentOut(
+        id=a.id,
+        created_at=a.created_at,
+        updated_at=a.updated_at,
+        source_type=a.source_type,
+        source_label=a.source_label,
+        assessment_kind=a.assessment_kind,
+        raw_text=a.raw_text,
+        strengths=a.strengths,
+        growth_areas=a.growth_areas,
+        demonstrated_skills=a.demonstrated_skills,
+        demonstrated_domains=a.demonstrated_domains,
+        work_style=a.work_style,
+        role_fit=a.role_fit,
+        confidence=a.confidence,
+        allowed_uses=a.allowed_uses,
+        is_preferred=a.is_preferred,
+        profile_id=a.profile_id,
+    )
+
+
+@app.get("/api/assessments/preferred", response_model=Optional[AssessmentOut])
+def get_preferred_assessment():
+    from app.services.candidate_assessment import get_preferred
+    with get_conn() as conn:
+        a = get_preferred(conn)
+    return _assessment_out(a) if a else None
+
+
+@app.get("/api/assessments", response_model=list[AssessmentOut])
+def list_assessments_route(
+    source_type:     Optional[str] = None,
+    assessment_kind: Optional[str] = None,
+):
+    from app.services.candidate_assessment import list_assessments
+    with get_conn() as conn:
+        items = list_assessments(conn, source_type=source_type,
+                                 assessment_kind=assessment_kind)
+    return [_assessment_out(a) for a in items]
+
+
+@app.post("/api/assessments", status_code=201, response_model=AssessmentOut)
+def create_assessment_route(body: AssessmentIn):
+    from app.services.candidate_assessment import create_assessment
+    try:
+        with get_conn() as conn:
+            a = create_assessment(
+                conn,
+                source_type=body.source_type,
+                source_label=body.source_label,
+                assessment_kind=body.assessment_kind,
+                raw_text=body.raw_text,
+                strengths=body.strengths,
+                growth_areas=body.growth_areas,
+                demonstrated_skills=body.demonstrated_skills,
+                demonstrated_domains=body.demonstrated_domains,
+                work_style=body.work_style,
+                role_fit=body.role_fit,
+                confidence=body.confidence,
+                allowed_uses=body.allowed_uses,
+                profile_id=body.profile_id,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return _assessment_out(a)
+
+
+@app.put("/api/assessments/{assessment_id}", response_model=AssessmentOut)
+def update_assessment_route(assessment_id: int, body: AssessmentIn):
+    from app.services.candidate_assessment import update_assessment
+    try:
+        with get_conn() as conn:
+            a = update_assessment(
+                conn,
+                assessment_id,
+                source_type=body.source_type,
+                source_label=body.source_label,
+                assessment_kind=body.assessment_kind,
+                raw_text=body.raw_text,
+                strengths=body.strengths,
+                growth_areas=body.growth_areas,
+                demonstrated_skills=body.demonstrated_skills,
+                demonstrated_domains=body.demonstrated_domains,
+                work_style=body.work_style,
+                role_fit=body.role_fit,
+                confidence=body.confidence,
+                allowed_uses=body.allowed_uses,
+                profile_id=body.profile_id,
+            )
+    except ValueError as exc:
+        status = 404 if "not found" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+    return _assessment_out(a)
+
+
+@app.delete("/api/assessments/{assessment_id}")
+def delete_assessment_route(assessment_id: int):
+    from app.services.candidate_assessment import delete_assessment
+    try:
+        with get_conn() as conn:
+            delete_assessment(conn, assessment_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Assessment {assessment_id} not found")
+    return {"ok": True, "id": assessment_id}
+
+
+@app.post("/api/assessments/{assessment_id}/set-preferred", response_model=AssessmentOut)
+def set_preferred_route(assessment_id: int):
+    from app.services.candidate_assessment import set_preferred, get_assessment
+    try:
+        with get_conn() as conn:
+            set_preferred(conn, assessment_id)
+            a = get_assessment(conn, assessment_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Assessment {assessment_id} not found")
+    return _assessment_out(a)

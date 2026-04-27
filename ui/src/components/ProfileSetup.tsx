@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { CandidateProfile, IngestStatus } from '../lib/api'
 import { api } from '../lib/api'
+import { CandidateAssessmentSection } from './CandidateAssessment'
 
 const SENIORITY_OPTIONS = ['', 'junior', 'mid', 'senior', 'staff', 'principal', 'lead']
 const REMOTE_OPTIONS    = ['', 'remote', 'hybrid', 'onsite', 'flexible']
@@ -436,6 +437,8 @@ export function ProfileSetup() {
           </button>
         </div>
       </div>
+
+      <CandidateAssessmentSection />
     </div>
   )
 }

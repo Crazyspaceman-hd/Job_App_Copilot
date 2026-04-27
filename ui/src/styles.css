@@ -979,3 +979,220 @@ a { color: #1a5a8a; }
   border-color: #e8b0b0;
 }
 .btn--danger:hover { background: #f8c8c8; }
+
+/* ── Candidate Assessments ────────────────────────────────────────────────── */
+
+.ca-section {
+  border-top: 1px solid #e0e0e0;
+  margin-top: 2.5rem;
+  padding-top: 2rem;
+}
+
+.ca-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.ca-section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 0.2rem;
+}
+
+.ca-section-subtitle {
+  font-size: 0.82rem;
+  color: #666;
+}
+
+.ca-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.ca-filter-select { width: auto; min-width: 160px; }
+
+.ca-count {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.ca-loading, .ca-empty {
+  color: #888;
+  font-size: 0.88rem;
+  padding: 1rem 0;
+}
+
+.ca-add-panel, .ca-edit-panel {
+  background: #f9f9f9;
+  border: 1px solid #e4e4e4;
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.ca-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ca-textarea--tall { min-height: 120px; resize: vertical; }
+
+.ca-uses-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ca-card-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.ca-card {
+  background: #fff;
+  border: 1px solid #e4e4e4;
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  transition: border-color 0.15s;
+}
+.ca-card--preferred {
+  border-color: #a0c4ff;
+  background: #f5faff;
+}
+
+.ca-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.ca-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ca-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.ca-star-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  color: #bbb;
+  padding: 0 0.1rem;
+  line-height: 1;
+}
+.ca-star-btn--active { color: #f5a623; }
+.ca-star-btn:hover   { color: #f5a623; }
+
+.ca-kind-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 99px;
+  background: #e8f0fe;
+  color: #1a56c4;
+}
+
+.ca-source-badge {
+  font-size: 0.75rem;
+  color: #555;
+  background: #f0f0f0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 99px;
+}
+
+.ca-source-label { color: #888; }
+
+.ca-confidence-badge {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 99px;
+  background: #e6f5ec;
+  color: #1a6e3a;
+}
+
+.ca-uses-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.ca-use-pill {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 99px;
+  background: #fff3e0;
+  color: #8a4d00;
+  border: 1px solid #f5c88a;
+}
+
+.ca-tag-rows { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.4rem; }
+
+.ca-tag-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.ca-tag-label {
+  font-size: 0.7rem;
+  color: #888;
+  min-width: 60px;
+}
+
+.ca-tag {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: #f0f0f0;
+  color: #444;
+}
+.ca-tag--strength { background: #e3f2e9; color: #1a5e2e; }
+.ca-tag--growth   { background: #fef3e2; color: #7a4800; }
+
+.ca-card-body {
+  margin-top: 0.75rem;
+  border-top: 1px solid #eee;
+  padding-top: 0.75rem;
+}
+
+.ca-raw-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f7f7f7;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  padding: 0.75rem;
+  font-size: 0.82rem;
+  color: #333;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.ca-meta-details {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  color: #444;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}

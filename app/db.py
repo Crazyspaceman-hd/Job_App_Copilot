@@ -204,6 +204,30 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     """)
     conn.commit()
 
+    # v2.0 – candidate_assessments (Candidate Assessment)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS candidate_assessments (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at           TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at           TEXT    NOT NULL DEFAULT (datetime('now')),
+            source_type          TEXT    NOT NULL DEFAULT 'manual',
+            source_label         TEXT,
+            assessment_kind      TEXT    NOT NULL DEFAULT 'working_assessment',
+            raw_text             TEXT    NOT NULL DEFAULT '',
+            strengths            TEXT    NOT NULL DEFAULT '[]',
+            growth_areas         TEXT    NOT NULL DEFAULT '[]',
+            demonstrated_skills  TEXT    NOT NULL DEFAULT '[]',
+            demonstrated_domains TEXT    NOT NULL DEFAULT '[]',
+            work_style           TEXT,
+            role_fit             TEXT,
+            confidence           TEXT,
+            allowed_uses         TEXT    NOT NULL DEFAULT '[]',
+            is_preferred         INTEGER NOT NULL DEFAULT 0,
+            profile_id           INTEGER
+        )
+    """)
+    conn.commit()
+
 
 # Keep the private alias so any internal callers are not broken.
 _apply_migrations = apply_migrations

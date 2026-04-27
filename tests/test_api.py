@@ -129,6 +129,25 @@ CREATE TABLE IF NOT EXISTS evidence_items (
     notes                 TEXT,
     profile_id            INTEGER
 );
+CREATE TABLE IF NOT EXISTS candidate_assessments (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at           TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at           TEXT    NOT NULL DEFAULT (datetime('now')),
+    source_type          TEXT    NOT NULL DEFAULT 'manual',
+    source_label         TEXT,
+    assessment_kind      TEXT    NOT NULL DEFAULT 'working_assessment',
+    raw_text             TEXT    NOT NULL DEFAULT '',
+    strengths            TEXT    NOT NULL DEFAULT '[]',
+    growth_areas         TEXT    NOT NULL DEFAULT '[]',
+    demonstrated_skills  TEXT    NOT NULL DEFAULT '[]',
+    demonstrated_domains TEXT    NOT NULL DEFAULT '[]',
+    work_style           TEXT,
+    role_fit             TEXT,
+    confidence           TEXT,
+    allowed_uses         TEXT    NOT NULL DEFAULT '[]',
+    is_preferred         INTEGER NOT NULL DEFAULT 0,
+    profile_id           INTEGER
+);
 """
 
 
@@ -787,3 +806,123 @@ def test_delete_evidence_removes_from_list(client):
 def test_delete_evidence_not_found_404(client):
     r = client.delete("/api/evidence/9999")
     assert r.status_code == 404
+
+
+# ── Candidate Assessments API ─────────────────────────────────────────────────
+
+SAMPLE_ASSESSMENT = {
+    "source_type":     "claude",
+    "source_label":    "Claude session 2026-04-24",
+    "assessment_kind": "working_assessment",
+    "raw_text":        "Strong systems thinker who ships iteratively.",
+    "strengths":       ["systems thinking", "shipping"],
+    "allowed_uses":    ["resume", "interview"],
+}
+
+
+def test_list_assessments_empty(client):
+    r = client.get("/api/assessments")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_create_assessment_201(client):
+    r = client.post("/api/assessments", json=SAMPLE_ASSESSMENT)
+    assert r.status_code == 201
+
+
+def test_create_assessment_returns_data(client):
+    r = client.post("/api/assessments", json=SAMPLE_ASSESSMENT)
+    data = r.json()
+    assert data["id"] > 0
+    assert data["source_type"] == "claude"
+    assert data["assessment_kind"] == "working_assessment"
+    assert "systems thinking" in data["strengths"]
+    assert data["is_preferred"] is False
+
+
+def test_create_assessment_invalid_source_type_422(client):
+    r = client.post("/api/assessments", json={**SAMPLE_ASSESSMENT, "source_type": "bad_bot"})
+    assert r.status_code == 422
+
+
+def test_create_assessment_invalid_kind_422(client):
+    r = client.post("/api/assessments", json={**SAMPLE_ASSESSMENT, "assessment_kind": "random"})
+    assert r.status_code == 422
+
+
+def test_list_assessments_filter_source_type(client):
+    client.post("/api/assessments", json={**SAMPLE_ASSESSMENT, "source_type": "claude"})
+    client.post("/api/assessments", json={**SAMPLE_ASSESSMENT, "source_type": "chatgpt"})
+    r = client.get("/api/assessments?source_type=claude")
+    items = r.json()
+    assert len(items) == 1
+    assert items[0]["source_type"] == "claude"
+
+
+def test_list_assessments_filter_kind(client):
+    client.post("/api/assessments", json={**SAMPLE_ASSESSMENT, "assessment_kind": "working_assessment"})
+    client.post("/api/assessments", json={**SAMPLE_ASSESSMENT, "assessment_kind": "growth_assessment"})
+    r = client.get("/api/assessments?assessment_kind=growth_assessment")
+    items = r.json()
+    assert len(items) == 1
+    assert items[0]["assessment_kind"] == "growth_assessment"
+
+
+def test_update_assessment_ok(client):
+    created = client.post("/api/assessments", json=SAMPLE_ASSESSMENT).json()
+    aid = created["id"]
+    r = client.put(f"/api/assessments/{aid}", json={**SAMPLE_ASSESSMENT, "raw_text": "Updated."})
+    assert r.status_code == 200
+    assert r.json()["raw_text"] == "Updated."
+
+
+def test_update_assessment_not_found_404(client):
+    r = client.put("/api/assessments/9999", json=SAMPLE_ASSESSMENT)
+    assert r.status_code == 404
+
+
+def test_delete_assessment_ok(client):
+    created = client.post("/api/assessments", json=SAMPLE_ASSESSMENT).json()
+    aid = created["id"]
+    r = client.delete(f"/api/assessments/{aid}")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+
+def test_delete_assessment_not_found_404(client):
+    r = client.delete("/api/assessments/9999")
+    assert r.status_code == 404
+
+
+def test_set_preferred_marks_assessment(client):
+    a1 = client.post("/api/assessments", json=SAMPLE_ASSESSMENT).json()
+    a2 = client.post("/api/assessments", json=SAMPLE_ASSESSMENT).json()
+    r = client.post(f"/api/assessments/{a2['id']}/set-preferred")
+    assert r.status_code == 200
+    assert r.json()["is_preferred"] is True
+
+
+def test_set_preferred_clears_others(client):
+    a1 = client.post("/api/assessments", json=SAMPLE_ASSESSMENT).json()
+    a2 = client.post("/api/assessments", json=SAMPLE_ASSESSMENT).json()
+    client.post(f"/api/assessments/{a1['id']}/set-preferred")
+    client.post(f"/api/assessments/{a2['id']}/set-preferred")
+    r = client.get("/api/assessments")
+    items = {item["id"]: item for item in r.json()}
+    assert items[a1["id"]]["is_preferred"] is False
+    assert items[a2["id"]]["is_preferred"] is True
+
+
+def test_get_preferred_returns_marked(client):
+    created = client.post("/api/assessments", json=SAMPLE_ASSESSMENT).json()
+    client.post(f"/api/assessments/{created['id']}/set-preferred")
+    r = client.get("/api/assessments/preferred")
+    assert r.status_code == 200
+    assert r.json()["id"] == created["id"]
+
+
+def test_get_preferred_returns_null_when_none(client):
+    r = client.get("/api/assessments/preferred")
+    assert r.status_code == 200
+    assert r.json() is None

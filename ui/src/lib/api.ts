@@ -182,6 +182,71 @@ export const ALLOWED_USE_LABELS: Record<string, string> = {
   interview_prep:         'Interview prep',
 }
 
+// Candidate Assessment types
+export interface CandidateAssessment {
+  id:                   number
+  created_at:           string
+  updated_at:           string
+  source_type:          string
+  source_label:         string | null
+  assessment_kind:      string
+  raw_text:             string
+  strengths:            string[]
+  growth_areas:         string[]
+  demonstrated_skills:  string[]
+  demonstrated_domains: string[]
+  work_style:           string | null
+  role_fit:             string | null
+  confidence:           string | null
+  allowed_uses:         string[]
+  is_preferred:         boolean
+  profile_id:           number | null
+}
+
+export interface CandidateAssessmentPayload {
+  source_type?:          string
+  source_label?:         string | null
+  assessment_kind?:      string
+  raw_text?:             string
+  strengths?:            string[]
+  growth_areas?:         string[]
+  demonstrated_skills?:  string[]
+  demonstrated_domains?: string[]
+  work_style?:           string | null
+  role_fit?:             string | null
+  confidence?:           string | null
+  allowed_uses?:         string[]
+  profile_id?:           number | null
+}
+
+export const ASSESSMENT_SOURCE_LABELS: Record<string, string> = {
+  chatgpt: 'ChatGPT',
+  claude:  'Claude',
+  gemini:  'Gemini',
+  manual:  'Manual',
+  other:   'Other',
+}
+
+export const ASSESSMENT_KIND_LABELS: Record<string, string> = {
+  working_assessment:            'Working Assessment',
+  skill_observation:             'Skill Observation',
+  project_delivery_assessment:   'Project Delivery',
+  growth_assessment:             'Growth Assessment',
+}
+
+export const ASSESSMENT_CONFIDENCE_LABELS: Record<string, string> = {
+  high:   'High',
+  medium: 'Medium',
+  low:    'Low',
+}
+
+export const ASSESSMENT_ALLOWED_USE_LABELS: Record<string, string> = {
+  resume:       'Resume',
+  cover_letter: 'Cover letter',
+  interview:    'Interview',
+  internal:     'Internal',
+}
+
 const BASE = '/api'
 
 async function get<T>(path: string): Promise<T> {
@@ -287,4 +352,28 @@ export const api = {
 
   deleteEvidence: (id: number) =>
     del<{ ok: boolean; item_id: number }>(`/evidence/${id}`),
+
+  // ── Candidate Assessments ──────────────────────────────────────────────────
+  listAssessments: (filters?: { source_type?: string; assessment_kind?: string }) => {
+    const params = new URLSearchParams()
+    if (filters?.source_type)      params.set('source_type', filters.source_type)
+    if (filters?.assessment_kind)  params.set('assessment_kind', filters.assessment_kind)
+    const qs = params.toString()
+    return get<CandidateAssessment[]>(`/assessments${qs ? '?' + qs : ''}`)
+  },
+
+  getPreferredAssessment: () =>
+    get<CandidateAssessment | null>('/assessments/preferred'),
+
+  createAssessment: (payload: CandidateAssessmentPayload) =>
+    post<CandidateAssessment>('/assessments', payload),
+
+  updateAssessment: (id: number, payload: CandidateAssessmentPayload) =>
+    put<CandidateAssessment>(`/assessments/${id}`, payload),
+
+  deleteAssessment: (id: number) =>
+    del<{ ok: boolean; id: number }>(`/assessments/${id}`),
+
+  setPreferredAssessment: (id: number) =>
+    post<CandidateAssessment>(`/assessments/${id}/set-preferred`, {}),
 }
