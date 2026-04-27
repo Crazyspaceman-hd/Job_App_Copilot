@@ -1,0 +1,14 @@
+Dear Hiring Manager,
+
+I am writing to express my strong interest in the Senior Backend Engineer role at TechCorp. With seven years of experience designing and shipping production Python systems — from high-throughput Kafka pipelines to FastAPI microservices handling millions of daily requests — I am confident I can make an immediate impact on your platform engineering team.
+
+At Acme Corp I led the end-to-end migration of a legacy payment processing monolith to a containerised microservice architecture. By replacing synchronous inter-service calls with event-driven messaging via Kafka, we cut p99 latency from 800 ms to 120 ms and eliminated a class of cascading failure modes that had cost the business three five-nines incidents in the prior year. I own the solution from architecture review through production runbook, and I am comfortable holding pager duty for systems I build.
+
+Prior to Acme, at DataFlow Inc I built the ETL foundation that ingested data from fifteen third-party providers into a centralised Redshift warehouse, enabling the analytics product that grew ARR from $4 M to $11 M in two years. I have a strong appreciation for data quality, idempotent pipelines, and making sure the people downstream of your code can trust it.
+
+I am particularly drawn to TechCorp because of your investment in open infrastructure tooling and your engineering blog's transparent post-mortems — both signal a culture of ownership and craft that aligns with how I like to work.
+
+Thank you for your time and consideration. I look forward to the opportunity to discuss how my background can contribute to the team's goals.
+
+Sincerely,
+Alex Rivera

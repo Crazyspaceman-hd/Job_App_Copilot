@@ -1,0 +1,20 @@
+Senior Python Engineer — Fully Remote
+
+About the role:
+We are a fast-growing fintech startup looking for a Senior Python Engineer to join
+our platform team. You will design and build scalable backend services that power
+our core payment infrastructure.
+
+Requirements:
+- 5+ years of Python experience
+- Strong knowledge of FastAPI or Django
+- Experience with PostgreSQL and Redis
+- Familiarity with AWS (Lambda, SQS, RDS)
+- Excellent communication skills
+
+Nice to have:
+- Experience with Kafka or event-driven architectures
+- Prior fintech or payments domain experience
+
+Location: Fully remote (US timezones preferred)
+Salary: $160,000 – $200,000

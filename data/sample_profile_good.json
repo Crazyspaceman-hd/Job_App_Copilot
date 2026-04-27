@@ -1,0 +1,57 @@
+{
+  "version": "1.1",
+  "personal": {
+    "name": "Alex Rivera",
+    "location": "Austin, TX",
+    "linkedin": "https://linkedin.com/in/arivera",
+    "github": "https://github.com/arivera"
+  },
+  "job_targets": {
+    "titles": ["Senior Backend Engineer", "Senior Python Engineer"],
+    "seniority_self_assessed": "senior",
+    "desired_remote_policy": "remote",
+    "work_authorization": "us_citizen",
+    "willing_to_relocate": false
+  },
+  "skills": {
+    "languages": [
+      {"name": "Python",     "years": 6, "evidence": "direct"},
+      {"name": "SQL",        "years": 5, "evidence": "direct"},
+      {"name": "TypeScript", "years": 2, "evidence": "adjacent"}
+    ],
+    "frameworks": [
+      {"name": "FastAPI",    "years": 3, "evidence": "direct"},
+      {"name": "Django",     "years": 2, "evidence": "adjacent"}
+    ],
+    "databases": [
+      {"name": "PostgreSQL", "years": 4, "evidence": "direct"},
+      {"name": "Redis",      "years": 2, "evidence": "direct"}
+    ],
+    "cloud": [
+      {"name": "AWS",        "years": 3, "evidence": "direct"},
+      {"name": "Lambda",     "years": 2, "evidence": "direct"}
+    ],
+    "tools": [
+      {"name": "Docker",     "years": 3, "evidence": "direct"},
+      {"name": "Git",        "years": 6, "evidence": "direct"}
+    ],
+    "practices": []
+  },
+  "domains": [
+    {"name": "fintech", "evidence": "adjacent"}
+  ],
+  "experience": [
+    {
+      "company":    "Acme Corp",
+      "title":      "Senior Software Engineer",
+      "start_date": "2020-03",
+      "end_date":   "present",
+      "bullets":    ["Built payment APIs processing 2M requests/day in Python + FastAPI"]
+    }
+  ],
+  "education": [
+    {"institution": "UT Austin", "degree": "B.S. Computer Science", "year": "2018"}
+  ],
+  "certifications": [],
+  "hard_constraints": {}
+}

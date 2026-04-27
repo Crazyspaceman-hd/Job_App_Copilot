@@ -1,0 +1,40 @@
+# Database
+data/copilot.db
+data/copilot.db-shm
+data/copilot.db-wal
+
+# Candidate data (personal info — add explicitly with -f if you want to track)
+data/candidate_profile.json
+data/project_inventory.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Node / Vite
+ui/node_modules/
+ui/dist/
+ui/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Generated outputs (remove to track them)
+out/

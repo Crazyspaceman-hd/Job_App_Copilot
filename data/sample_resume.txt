@@ -1,0 +1,64 @@
+Alex Rivera
+Austin, TX  |  alex.rivera@example.com  |  linkedin.com/in/alexrivera  |  github.com/alexrivera
+
+SUMMARY
+
+Senior Software Engineer with 7 years of experience building high-throughput data pipelines
+and backend APIs in Python. Passionate about distributed systems, cloud-native architecture,
+and driving measurable business impact through clean, well-tested code.
+
+EXPERIENCE
+
+Senior Software Engineer — Acme Corp, Austin TX                       Mar 2020 – Present
+- Led migration of monolithic payment processing system to microservices using FastAPI and
+  Docker, reducing p99 latency from 800 ms to 120 ms
+- Designed and implemented real-time event streaming pipeline with Kafka and Python consumers,
+  processing 50 million events per day
+- Built multi-tenant PostgreSQL schema supporting 200+ enterprise clients with row-level
+  security and automated schema migrations via Alembic
+- Mentored a team of 3 junior engineers through code reviews, architecture discussions, and
+  pair programming sessions
+- Reduced AWS Lambda cold-start times by 60% through dependency optimisation and layer caching
+- Introduced automated integration tests using pytest and GitHub Actions, raising coverage
+  from 34% to 87%
+
+Software Engineer — DataFlow Inc, San Francisco CA                    Jun 2017 – Feb 2020
+- Developed REST and GraphQL APIs for a B2B analytics platform serving 500+ clients using
+  Django REST Framework and Apollo Server (Node.js)
+- Built ETL pipelines in Python and Apache Airflow to ingest data from 15 third-party APIs
+  into a centralised Redshift data warehouse
+- Optimised slow SQL queries in PostgreSQL, reducing average report generation time by 70%
+- Containerised the full application stack with Docker Compose and deployed to AWS ECS
+- Collaborated with data science team to productionise ML models using scikit-learn and
+  deployed scoring endpoints via Flask
+
+EDUCATION
+
+B.S. Computer Science — University of Texas at Austin                 Graduated May 2017
+- GPA 3.7 / 4.0
+- Relevant coursework: Operating Systems, Distributed Systems, Database Systems, Algorithms
+
+SKILLS
+
+Languages:    Python, SQL, JavaScript, TypeScript, Bash
+Frameworks:   FastAPI, Django, Flask, Django REST Framework, Celery
+Databases:    PostgreSQL, Redis, MySQL, DynamoDB, Redshift
+Cloud:        AWS (EC2, Lambda, ECS, S3, SQS, RDS), GCP (BigQuery, Cloud Run)
+Tools:        Docker, Kubernetes, Kafka, Airflow, Git, GitHub Actions, Terraform, Alembic
+Testing:      pytest, unittest, coverage.py, Locust
+
+CERTIFICATIONS
+
+- AWS Certified Solutions Architect — Associate (2022)
+- AWS Certified Developer — Associate (2021)
+
+PROJECTS
+
+Open-Source SQL Formatter (github.com/alexrivera/sqlformatter)
+- Built a Python library for formatting and linting SQL queries with 400+ GitHub stars
+- Supports PostgreSQL, MySQL, and BigQuery dialects; published to PyPI with CI via GitHub Actions
+
+Async Task Scheduler Proof-of-Concept
+- Designed a lightweight distributed task queue in Python using Redis Streams as the broker
+- Benchmarked against Celery; achieved 2× throughput on CPU-bound tasks by eliminating pickle
+  serialisation overhead

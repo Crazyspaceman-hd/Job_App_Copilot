@@ -1,0 +1,16 @@
+# Job Application Copilot — Python dependencies
+
+# ── API server ────────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# ── Future LLM integration (uncomment when ready) ────────────────────────────
+# anthropic>=0.25.0          # Claude API client
+# openai>=1.0.0              # alternative LLM client
+
+# ── Future document generation ───────────────────────────────────────────────
+# python-docx>=1.1.0         # .docx resume/cover-letter export
+# jinja2>=3.1.0              # templating for generated assets
+
+# ── Dev / testing ────────────────────────────────────────────────────────────
+pytest>=8.0.0
