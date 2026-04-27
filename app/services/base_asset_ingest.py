@@ -150,10 +150,18 @@ for _canon, _variants in _SECTION_HEADINGS.items():
 
 # ── Regex primitives ──────────────────────────────────────────────────────────
 
-_BULLET_MARKER   = re.compile(r"^[\t ]*[-*+•·◦○▪▸►»]\s+")
+_BULLET_MARKER   = re.compile(r"^[\t ]*[-*+•·◦○▪▸►»–—>•‣◦⁃●◉]\s+")
 _NUMBERED_MARKER = re.compile(r"^[\t ]*\d+[.)]\s+")
 _UNDERLINE_LINE  = re.compile(r"^[-=*_]{3,}\s*$")
 _MARKDOWN_HDR    = re.compile(r"^(#{1,3})\s+(.+)$")
+# Looks like a date range or short metadata line — not useful as a bullet
+_DATE_OR_META    = re.compile(
+    r"^\s*(\d{4}\s*[-–—]\s*(\d{4}|present|current|now)|"  # 2018–2022
+    r"\w+\.?\s+\d{4}\s*[-–—]|"                             # Jan 2020 –
+    r"[A-Z][a-z]+,\s+[A-Z]{2}|"                            # City, ST
+    r"\+?\d[\d\s\-().]{6,})\s*$",                           # phone number
+    re.IGNORECASE,
+)
 
 
 # ── Heading classification ────────────────────────────────────────────────────
@@ -287,23 +295,38 @@ def parse_resume(raw_text: str, label: str = "default") -> ResumeResult:
     for sec_name, start_idx, end_idx, heading_text in spans:
         sec_bullets: list[ResumeBullet] = []
 
+        # First pass: explicit bullet markers
         for j in range(start_idx, end_idx):
             bullet_text = _extract_bullet_text(lines[j])
             if bullet_text and bullet_text.strip():
                 skills = _extract_vocab_terms(bullet_text)
-                b = ResumeBullet(
+                sec_bullets.append(ResumeBullet(
                     section     = sec_name,
                     text        = bullet_text,
                     skills      = skills,
-                    source_line = j + 1,   # convert to 1-based
-                )
-                sec_bullets.append(b)
-                bullet_bank.append(b)
+                    source_line = j + 1,
+                ))
 
-        # Heading appears on the line before content_start
-        # (or content_start - 2 for underline style, but we store the heading line)
-        heading_line = max(1, start_idx)   # 1-based; the heading is just before content
+        # Fallback: if no explicit bullets found, treat all non-trivial content
+        # lines as bullets (handles plain-text / PDF-pasted resumes)
+        if not sec_bullets and sec_name not in ("header", "contact"):
+            for j in range(start_idx, end_idx):
+                text = lines[j].strip()
+                if (text
+                        and len(text) >= 20
+                        and not _DATE_OR_META.match(text)
+                        and not _is_heading(text, None)[0]):
+                    skills = _extract_vocab_terms(text)
+                    sec_bullets.append(ResumeBullet(
+                        section     = sec_name,
+                        text        = text,
+                        skills      = skills,
+                        source_line = j + 1,
+                    ))
 
+        bullet_bank.extend(sec_bullets)
+
+        heading_line = max(1, start_idx)
         sections.append(ResumeSection(
             name       = sec_name,
             heading    = heading_text,
@@ -325,32 +348,91 @@ def parse_resume(raw_text: str, label: str = "default") -> ResumeResult:
 
 # ── Cover letter parsing ──────────────────────────────────────────────────────
 
+_CL_SALUTATION = re.compile(r"^(dear|to whom|hello|hi)\b", re.IGNORECASE)
+_CL_CLOSING    = re.compile(
+    r"^(sincerely|regards|best regards|kind regards|thank you|thanks|"
+    r"respectfully|yours truly|warm regards|cheers)\b",
+    re.IGNORECASE,
+)
+
+
+def _split_cl_paragraphs(
+    lines: list[str],
+    use_sentence_breaks: bool = False,
+) -> list[tuple[str, int]]:
+    """
+    Split cover letter lines into paragraphs.
+
+    Always splits on:
+      1. Blank lines
+      2. Salutation lines ("Dear …")
+      3. Closing lines ("Sincerely, …")
+
+    When use_sentence_breaks=True (no blank lines in document) also splits on:
+      4. A line that starts a new sentence — capitalised first word after a
+         line that ended with sentence-final punctuation.
+    """
+    paragraphs: list[tuple[str, int]] = []
+    current:    list[str] = []
+    para_start  = 1
+    prev_stripped = ""
+
+    def flush():
+        nonlocal current, para_start
+        if current:
+            paragraphs.append((" ".join(current), para_start))
+            current = []
+
+    for i, line in enumerate(lines, start=1):
+        stripped = line.strip()
+
+        if not stripped:
+            flush()
+            prev_stripped = ""
+            continue
+
+        is_salutation = bool(_CL_SALUTATION.match(stripped))
+        is_closing    = bool(_CL_CLOSING.match(stripped))
+
+        sentence_break = (
+            use_sentence_breaks
+            and current
+            and prev_stripped
+            and prev_stripped[-1] in ".!?"
+            and stripped[0].isupper()
+            and not is_salutation
+            and not is_closing
+        )
+
+        if (is_salutation or is_closing or sentence_break) and current:
+            flush()
+            para_start = i
+
+        if not current:
+            para_start = i
+        current.append(stripped)
+        prev_stripped = stripped
+
+    flush()
+    return paragraphs
+
+
 def parse_cover_letter(raw_text: str, label: str = "default") -> CoverLetterResult:
     """
     Parse *raw_text* into a structured CoverLetterResult without DB access.
     Paragraphs are classified by position:
       first → opening, last → closing, all others → proof_point.
     Content is never rewritten.
+
+    Paragraph splitting strategy:
+      - If the text contains blank lines, blank lines are the only separator
+        (standard well-formatted cover letter).
+      - If the text has NO blank lines at all, the sentence-break heuristic is
+        used instead (handles wall-of-text paste from PDFs / copy-paste).
     """
     lines = raw_text.splitlines()
-
-    # Collect paragraphs (contiguous non-blank lines)
-    paragraphs: list[tuple[str, int]] = []   # (joined_text, start_line_1based)
-    current:    list[str] = []
-    para_start  = 1
-
-    for i, line in enumerate(lines, start=1):
-        if line.strip():
-            if not current:
-                para_start = i
-            current.append(line.strip())
-        else:
-            if current:
-                paragraphs.append((" ".join(current), para_start))
-                current = []
-
-    if current:
-        paragraphs.append((" ".join(current), para_start))
+    has_blank_lines = any(not line.strip() for line in lines)
+    paragraphs = _split_cl_paragraphs(lines, use_sentence_breaks=not has_blank_lines)
 
     n = len(paragraphs)
     fragments: list[CLFragment] = []

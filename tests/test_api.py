@@ -146,7 +146,10 @@ CREATE TABLE IF NOT EXISTS candidate_assessments (
     confidence           TEXT,
     allowed_uses         TEXT    NOT NULL DEFAULT '[]',
     is_preferred         INTEGER NOT NULL DEFAULT 0,
-    profile_id           INTEGER
+    profile_id           INTEGER,
+    prompt_type          TEXT,
+    prompt_version       TEXT,
+    source_model         TEXT
 );
 """
 
@@ -926,3 +929,85 @@ def test_get_preferred_returns_null_when_none(client):
     r = client.get("/api/assessments/preferred")
     assert r.status_code == 200
     assert r.json() is None
+
+
+def test_create_assessment_stores_prompt_metadata(client):
+    r = client.post("/api/assessments", json={
+        **SAMPLE_ASSESSMENT,
+        "prompt_type":    "working_assessment",
+        "prompt_version": "1.0",
+        "source_model":   "claude-opus-4",
+    })
+    assert r.status_code == 201
+    data = r.json()
+    assert data["prompt_type"]    == "working_assessment"
+    assert data["prompt_version"] == "1.0"
+    assert data["source_model"]   == "claude-opus-4"
+
+
+def test_create_assessment_invalid_prompt_type_422(client):
+    r = client.post("/api/assessments", json={
+        **SAMPLE_ASSESSMENT,
+        "prompt_type": "not_a_real_prompt",
+    })
+    assert r.status_code == 422
+
+
+def test_assessment_prompt_fields_default_none(client):
+    r = client.post("/api/assessments", json=SAMPLE_ASSESSMENT)
+    data = r.json()
+    assert data["prompt_type"]    is None
+    assert data["prompt_version"] is None
+    assert data["source_model"]   is None
+
+
+# ── GET /api/assessment-prompts ───────────────────────────────────────────────
+
+def test_list_assessment_prompts_200(client):
+    r = client.get("/api/assessment-prompts")
+    assert r.status_code == 200
+
+
+def test_list_assessment_prompts_returns_four(client):
+    r = client.get("/api/assessment-prompts")
+    assert len(r.json()) == 4
+
+
+def test_list_assessment_prompts_shape(client):
+    items = client.get("/api/assessment-prompts").json()
+    for item in items:
+        assert "prompt_type"  in item
+        assert "version"      in item
+        assert "title"        in item
+        assert "description"  in item
+        assert "full_text"    in item
+
+
+def test_list_assessment_prompts_sorted(client):
+    items = client.get("/api/assessment-prompts").json()
+    types = [i["prompt_type"] for i in items]
+    assert types == sorted(types)
+
+
+def test_get_single_prompt_200(client):
+    r = client.get("/api/assessment-prompts/working_assessment")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["prompt_type"] == "working_assessment"
+    assert len(data["full_text"]) > 200
+
+
+def test_get_single_prompt_not_found_404(client):
+    r = client.get("/api/assessment-prompts/made_up_type")
+    assert r.status_code == 404
+
+
+def test_prompt_full_text_contains_truthfulness_rule(client):
+    r = client.get("/api/assessment-prompts/skill_observation")
+    assert "TRUTHFULNESS OVER FLATTERY" in r.json()["full_text"]
+
+
+def test_prompt_full_text_contains_output_schema(client):
+    r = client.get("/api/assessment-prompts/growth_assessment")
+    assert '"strengths"' in r.json()["full_text"]
+    assert '"confidence"' in r.json()["full_text"]

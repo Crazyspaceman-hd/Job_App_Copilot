@@ -201,6 +201,9 @@ export interface CandidateAssessment {
   allowed_uses:         string[]
   is_preferred:         boolean
   profile_id:           number | null
+  prompt_type:          string | null
+  prompt_version:       string | null
+  source_model:         string | null
 }
 
 export interface CandidateAssessmentPayload {
@@ -217,6 +220,17 @@ export interface CandidateAssessmentPayload {
   confidence?:           string | null
   allowed_uses?:         string[]
   profile_id?:           number | null
+  prompt_type?:          string | null
+  prompt_version?:       string | null
+  source_model?:         string | null
+}
+
+export interface AssessmentPrompt {
+  prompt_type:  string
+  version:      string
+  title:        string
+  description:  string
+  full_text:    string
 }
 
 export const ASSESSMENT_SOURCE_LABELS: Record<string, string> = {
@@ -376,4 +390,11 @@ export const api = {
 
   setPreferredAssessment: (id: number) =>
     post<CandidateAssessment>(`/assessments/${id}/set-preferred`, {}),
+
+  // ── Assessment Prompts ─────────────────────────────────────────────────────
+  listAssessmentPrompts: () =>
+    get<AssessmentPrompt[]>('/assessment-prompts'),
+
+  getAssessmentPrompt: (promptType: string) =>
+    get<AssessmentPrompt>(`/assessment-prompts/${promptType}`),
 }

@@ -260,10 +260,12 @@ def test_bullet_numbered():
     assert "Second achievement" in texts
 
 
-def test_non_bullet_body_not_extracted():
-    """A plain body line (no bullet marker) should not appear in bullet_bank."""
+def test_non_bullet_body_extracted_as_fallback():
+    """A plain body line with no bullet marker is captured via the fallback
+    (sections with no explicit bullets extract all non-trivial content lines)."""
     r = parse_resume("EXPERIENCE\nSenior Engineer at Acme Corp, 2020-2023\n")
-    assert not r.bullet_bank
+    assert len(r.bullet_bank) == 1
+    assert "Senior Engineer" in r.bullet_bank[0].text
 
 
 def test_empty_bullet_line_not_extracted():

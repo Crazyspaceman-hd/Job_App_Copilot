@@ -47,9 +47,18 @@ class CandidateAssessment:
     allowed_uses: list[str]
     is_preferred: bool
     profile_id: Optional[int]
+    # v2.1 prompt metadata
+    prompt_type: Optional[str] = None
+    prompt_version: Optional[str] = None
+    source_model: Optional[str] = None
 
 
-def _validate(source_type: str, assessment_kind: str, allowed_uses: list[str]) -> None:
+def _validate(
+    source_type: str,
+    assessment_kind: str,
+    allowed_uses: list[str],
+    prompt_type: Optional[str] = None,
+) -> None:
     if source_type not in SOURCE_TYPES:
         raise ValueError(f"source_type must be one of {sorted(SOURCE_TYPES)}")
     if assessment_kind not in ASSESSMENT_KINDS:
@@ -57,9 +66,14 @@ def _validate(source_type: str, assessment_kind: str, allowed_uses: list[str]) -
     bad = [u for u in allowed_uses if u not in ALLOWED_USE_VALUES]
     if bad:
         raise ValueError(f"Invalid allowed_uses values: {bad}")
+    if prompt_type is not None:
+        from app.services.candidate_assessment_prompts import PROMPT_TYPES
+        if prompt_type not in PROMPT_TYPES:
+            raise ValueError(f"prompt_type must be one of {sorted(PROMPT_TYPES)}")
 
 
 def _row_to_assessment(row: sqlite3.Row) -> CandidateAssessment:
+    keys = row.keys()
     return CandidateAssessment(
         id=row["id"],
         created_at=row["created_at"],
@@ -78,6 +92,9 @@ def _row_to_assessment(row: sqlite3.Row) -> CandidateAssessment:
         allowed_uses=json.loads(row["allowed_uses"] or "[]"),
         is_preferred=bool(row["is_preferred"]),
         profile_id=row["profile_id"],
+        prompt_type=row["prompt_type"] if "prompt_type" in keys else None,
+        prompt_version=row["prompt_version"] if "prompt_version" in keys else None,
+        source_model=row["source_model"] if "source_model" in keys else None,
     )
 
 
@@ -97,6 +114,9 @@ def create_assessment(
     confidence: Optional[str] = None,
     allowed_uses: list[str] | None = None,
     profile_id: Optional[int] = None,
+    prompt_type: Optional[str] = None,
+    prompt_version: Optional[str] = None,
+    source_model: Optional[str] = None,
 ) -> CandidateAssessment:
     strengths = normalize_tags(strengths or [])
     growth_areas = normalize_tags(growth_areas or [])
@@ -104,21 +124,23 @@ def create_assessment(
     demonstrated_domains = normalize_tags(demonstrated_domains or [])
     allowed_uses = normalize_tags(allowed_uses or [])
 
-    _validate(source_type, assessment_kind, allowed_uses)
+    _validate(source_type, assessment_kind, allowed_uses, prompt_type)
 
     cur = conn.execute(
         """
         INSERT INTO candidate_assessments
             (source_type, source_label, assessment_kind, raw_text,
              strengths, growth_areas, demonstrated_skills, demonstrated_domains,
-             work_style, role_fit, confidence, allowed_uses, profile_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+             work_style, role_fit, confidence, allowed_uses, profile_id,
+             prompt_type, prompt_version, source_model)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             source_type, source_label, assessment_kind, raw_text,
             json.dumps(strengths), json.dumps(growth_areas),
             json.dumps(demonstrated_skills), json.dumps(demonstrated_domains),
             work_style, role_fit, confidence, json.dumps(allowed_uses), profile_id,
+            prompt_type, prompt_version, source_model,
         ),
     )
     conn.commit()
@@ -174,6 +196,9 @@ def update_assessment(
     confidence: Optional[str] = None,
     allowed_uses: list[str] | None = None,
     profile_id: Optional[int] = None,
+    prompt_type: Optional[str] = None,
+    prompt_version: Optional[str] = None,
+    source_model: Optional[str] = None,
 ) -> CandidateAssessment:
     existing = get_assessment(conn, assessment_id)
 
@@ -190,8 +215,11 @@ def update_assessment(
     confidence = confidence if confidence is not None else existing.confidence
     allowed_uses = normalize_tags(allowed_uses if allowed_uses is not None else existing.allowed_uses)
     profile_id = profile_id if profile_id is not None else existing.profile_id
+    prompt_type = prompt_type if prompt_type is not None else existing.prompt_type
+    prompt_version = prompt_version if prompt_version is not None else existing.prompt_version
+    source_model = source_model if source_model is not None else existing.source_model
 
-    _validate(source_type, assessment_kind, allowed_uses)
+    _validate(source_type, assessment_kind, allowed_uses, prompt_type)
 
     conn.execute(
         """
@@ -199,6 +227,7 @@ def update_assessment(
         SET source_type=?, source_label=?, assessment_kind=?, raw_text=?,
             strengths=?, growth_areas=?, demonstrated_skills=?, demonstrated_domains=?,
             work_style=?, role_fit=?, confidence=?, allowed_uses=?, profile_id=?,
+            prompt_type=?, prompt_version=?, source_model=?,
             updated_at=datetime('now')
         WHERE id=?
         """,
@@ -207,6 +236,7 @@ def update_assessment(
             json.dumps(strengths), json.dumps(growth_areas),
             json.dumps(demonstrated_skills), json.dumps(demonstrated_domains),
             work_style, role_fit, confidence, json.dumps(allowed_uses), profile_id,
+            prompt_type, prompt_version, source_model,
             assessment_id,
         ),
     )

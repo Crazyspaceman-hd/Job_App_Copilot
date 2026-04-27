@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { CandidateAssessment, CandidateAssessmentPayload } from '../lib/api'
+import type { AssessmentPrompt, CandidateAssessment, CandidateAssessmentPayload } from '../lib/api'
 import {
   ASSESSMENT_ALLOWED_USE_LABELS,
   ASSESSMENT_CONFIDENCE_LABELS,
@@ -23,6 +23,9 @@ const EMPTY_FORM: CandidateAssessmentPayload = {
   role_fit:             '',
   confidence:           '',
   allowed_uses:         [],
+  prompt_type:          null,
+  prompt_version:       null,
+  source_model:         '',
 }
 
 function tagsToText(tags: string[]): string { return tags.join(', ') }
@@ -30,15 +33,82 @@ function textToTags(text: string): string[] {
   return text.split(',').map(t => t.trim()).filter(Boolean)
 }
 
+// ── PromptPanel ──────────────────────────────────────────────────────────────
+
+interface PromptPanelProps {
+  prompts:       AssessmentPrompt[]
+  selectedType:  string | null
+  onSelect:      (pt: string | null) => void
+}
+
+function PromptPanel({ prompts, selectedType, onSelect }: PromptPanelProps) {
+  const [copied, setCopied] = useState(false)
+  const selected = prompts.find(p => p.prompt_type === selectedType) ?? null
+
+  async function handleCopy() {
+    if (!selected) return
+    try {
+      await navigator.clipboard.writeText(selected.full_text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // fallback: show the text in a textarea for manual copy
+    }
+  }
+
+  return (
+    <div className="ca-prompt-panel">
+      <div className="ca-prompt-header">
+        <span className="ca-prompt-label">Stock prompt</span>
+        <span className="ca-prompt-hint">
+          Select a type, copy the prompt, paste into your AI session, then paste the response back.
+        </span>
+      </div>
+
+      <div className="ca-prompt-types">
+        <button
+          className={`ca-prompt-type-btn ${selectedType === null ? 'ca-prompt-type-btn--active' : ''}`}
+          onClick={() => onSelect(null)}
+        >
+          None
+        </button>
+        {prompts.map(p => (
+          <button
+            key={p.prompt_type}
+            className={`ca-prompt-type-btn ${selectedType === p.prompt_type ? 'ca-prompt-type-btn--active' : ''}`}
+            onClick={() => onSelect(p.prompt_type)}
+          >
+            {p.title}
+          </button>
+        ))}
+      </div>
+
+      {selected && (
+        <div className="ca-prompt-detail">
+          <div className="ca-prompt-description">{selected.description}</div>
+          <div className="ca-prompt-actions">
+            <button className="btn btn--primary btn--sm" onClick={handleCopy}>
+              {copied ? 'Copied!' : 'Copy prompt'}
+            </button>
+            <span className="ca-prompt-version">v{selected.version}</span>
+          </div>
+          <pre className="ca-prompt-text">{selected.full_text}</pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── AssessmentForm ─────────────────────────────────────────────────────────────
 
 interface FormProps {
-  initial?: CandidateAssessment | null
-  onSave: (payload: CandidateAssessmentPayload) => Promise<void>
-  onCancel: () => void
+  initial?:  CandidateAssessment | null
+  prompts:   AssessmentPrompt[]
+  onSave:    (payload: CandidateAssessmentPayload) => Promise<void>
+  onCancel:  () => void
 }
 
-function AssessmentForm({ initial, onSave, onCancel }: FormProps) {
+function AssessmentForm({ initial, prompts, onSave, onCancel }: FormProps) {
   const [form, setForm] = useState<CandidateAssessmentPayload>(() =>
     initial
       ? {
@@ -54,6 +124,9 @@ function AssessmentForm({ initial, onSave, onCancel }: FormProps) {
           role_fit:             initial.role_fit ?? '',
           confidence:           initial.confidence ?? '',
           allowed_uses:         initial.allowed_uses,
+          prompt_type:          initial.prompt_type ?? null,
+          prompt_version:       initial.prompt_version ?? null,
+          source_model:         initial.source_model ?? '',
         }
       : EMPTY_FORM
   )
@@ -73,6 +146,16 @@ function AssessmentForm({ initial, onSave, onCancel }: FormProps) {
     )
   }
 
+  function handlePromptSelect(pt: string | null) {
+    const matched = prompts.find(p => p.prompt_type === pt)
+    set('prompt_type', pt)
+    set('prompt_version', matched?.version ?? null)
+    // Keep assessment_kind in sync with prompt type when it matches a valid kind
+    if (pt && Object.keys(ASSESSMENT_KIND_LABELS).includes(pt)) {
+      set('assessment_kind', pt)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -88,6 +171,13 @@ function AssessmentForm({ initial, onSave, onCancel }: FormProps) {
 
   return (
     <form className="ca-form" onSubmit={handleSubmit}>
+
+      <PromptPanel
+        prompts={prompts}
+        selectedType={form.prompt_type ?? null}
+        onSelect={handlePromptSelect}
+      />
+
       <div className="ca-form-grid">
         <label className="form-label">
           Source
@@ -103,11 +193,22 @@ function AssessmentForm({ initial, onSave, onCancel }: FormProps) {
         </label>
 
         <label className="form-label">
+          Model used (optional)
+          <input
+            className="form-input"
+            type="text"
+            placeholder="e.g. claude-opus-4, gpt-4o"
+            value={form.source_model ?? ''}
+            onChange={e => set('source_model', e.target.value || null)}
+          />
+        </label>
+
+        <label className="form-label">
           Source label (optional)
           <input
             className="form-input"
             type="text"
-            placeholder="e.g. Claude session 2026-04-24"
+            placeholder="e.g. Claude session 2026-04-27"
             value={form.source_label ?? ''}
             onChange={e => set('source_label', e.target.value)}
           />
@@ -147,7 +248,7 @@ function AssessmentForm({ initial, onSave, onCancel }: FormProps) {
           className="form-textarea ca-textarea--tall"
           value={form.raw_text}
           onChange={e => set('raw_text', e.target.value)}
-          placeholder="Paste the full assessment text here…"
+          placeholder="Paste the AI response or your manual assessment here…"
           rows={6}
         />
       </label>
@@ -251,14 +352,14 @@ function AssessmentForm({ initial, onSave, onCancel }: FormProps) {
 // ── AssessmentCard ─────────────────────────────────────────────────────────────
 
 interface CardProps {
-  assessment: CandidateAssessment
-  onEdit:          () => void
-  onDelete:        () => void
-  onSetPreferred:  () => void
+  assessment:     CandidateAssessment
+  onEdit:         () => void
+  onDelete:       () => void
+  onSetPreferred: () => void
 }
 
 function AssessmentCard({ assessment: a, onEdit, onDelete, onSetPreferred }: CardProps) {
-  const [expanded,     setExpanded]     = useState(false)
+  const [expanded,      setExpanded]      = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -272,16 +373,22 @@ function AssessmentCard({ assessment: a, onEdit, onDelete, onSetPreferred }: Car
           >
             {a.is_preferred ? '★' : '☆'}
           </button>
-          <span className="ca-kind-badge ca-kind-badge--{a.assessment_kind}">
+          <span className="ca-kind-badge">
             {ASSESSMENT_KIND_LABELS[a.assessment_kind] ?? a.assessment_kind}
           </span>
           <span className="ca-source-badge">
             {ASSESSMENT_SOURCE_LABELS[a.source_type] ?? a.source_type}
+            {a.source_model && <span className="ca-source-label"> · {a.source_model}</span>}
             {a.source_label && <span className="ca-source-label"> · {a.source_label}</span>}
           </span>
           {a.confidence && (
             <span className="ca-confidence-badge">
               {ASSESSMENT_CONFIDENCE_LABELS[a.confidence] ?? a.confidence}
+            </span>
+          )}
+          {a.prompt_type && (
+            <span className="ca-prompt-badge" title={`Prompt v${a.prompt_version ?? '?'}`}>
+              prompt: {a.prompt_type.replace(/_/g, ' ')}
             </span>
           )}
         </div>
@@ -313,7 +420,8 @@ function AssessmentCard({ assessment: a, onEdit, onDelete, onSetPreferred }: Car
         </div>
       )}
 
-      {(a.strengths.length > 0 || a.growth_areas.length > 0 || a.demonstrated_skills.length > 0) && (
+      {(a.strengths.length > 0 || a.growth_areas.length > 0 ||
+        a.demonstrated_skills.length > 0 || a.demonstrated_domains.length > 0) && (
         <div className="ca-tag-rows">
           {a.strengths.length > 0 && (
             <div className="ca-tag-row">
@@ -361,20 +469,24 @@ function AssessmentCard({ assessment: a, onEdit, onDelete, onSetPreferred }: Car
 
 export function CandidateAssessmentSection() {
   const [assessments, setAssessments] = useState<CandidateAssessment[]>([])
+  const [prompts,     setPrompts]     = useState<AssessmentPrompt[]>([])
   const [loading,     setLoading]     = useState(true)
   const [err,         setErr]         = useState<string | null>(null)
 
   const [showAdd,   setShowAdd]   = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-
   const [filterKind, setFilterKind] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     setErr(null)
     try {
-      const items = await api.listAssessments()
+      const [items, promptList] = await Promise.all([
+        api.listAssessments(),
+        api.listAssessmentPrompts(),
+      ])
       setAssessments(items)
+      setPrompts(promptList)
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -417,6 +529,7 @@ export function CandidateAssessmentSection() {
           <h2 className="ca-section-title">Candidate Assessments</h2>
           <p className="ca-section-subtitle">
             Structured, AI-derived or manual assessments of your strengths, work style, and fit.
+            Use stock prompts to get consistent output across models.
           </p>
         </div>
         {!showAdd && (
@@ -429,6 +542,7 @@ export function CandidateAssessmentSection() {
       {showAdd && (
         <div className="ca-add-panel">
           <AssessmentForm
+            prompts={prompts}
             onSave={handleAdd}
             onCancel={() => setShowAdd(false)}
           />
@@ -454,7 +568,8 @@ export function CandidateAssessmentSection() {
 
       {!loading && !err && visible.length === 0 && (
         <div className="ca-empty">
-          No assessments yet. Add one to capture AI or manual insights about your work.
+          No assessments yet. Click "+ Add assessment", pick a stock prompt, run it in your AI of
+          choice, and paste the response back.
         </div>
       )}
 
@@ -464,6 +579,7 @@ export function CandidateAssessmentSection() {
             <div key={a.id} className="ca-edit-panel">
               <AssessmentForm
                 initial={a}
+                prompts={prompts}
                 onSave={payload => handleUpdate(a.id, payload)}
                 onCancel={() => setEditingId(null)}
               />

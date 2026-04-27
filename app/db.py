@@ -228,6 +228,18 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     """)
     conn.commit()
 
+    # v2.1 – prompt metadata on candidate_assessments
+    for col, coltype in [
+        ("prompt_type",    "TEXT"),
+        ("prompt_version", "TEXT"),
+        ("source_model",   "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE candidate_assessments ADD COLUMN {col} {coltype}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already present
+
 
 # Keep the private alias so any internal callers are not broken.
 _apply_migrations = apply_migrations

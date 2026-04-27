@@ -26,6 +26,17 @@ from app.services.tracker import (
     load_application_package,
     save_application_decision,
 )
+from app.services.base_asset_ingest import ingest_resume, ingest_cover_letter
+from app.services.evidence_bank import (
+    create_item, delete_item, get_item, list_items, update_item,
+)
+from app.services.candidate_assessment import (
+    create_assessment, delete_assessment, get_assessment,
+    get_preferred, list_assessments, set_preferred, update_assessment,
+)
+from app.services.candidate_assessment_prompts import (
+    get_prompt, list_prompts, CURRENT_VERSION, PROMPT_TYPES,
+)
 
 # Initialise DB on startup (idempotent)
 init_db()
@@ -541,8 +552,6 @@ def _profile_is_filled(data: dict) -> bool:
 
 @app.post("/api/ingest/resume")
 def api_ingest_resume(body: IngestTextIn):
-    from app.services.base_asset_ingest import ingest_resume
-
     if not body.text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
 
@@ -560,8 +569,6 @@ def api_ingest_resume(body: IngestTextIn):
 
 @app.post("/api/ingest/cover-letter")
 def api_ingest_cover_letter(body: IngestTextIn):
-    from app.services.base_asset_ingest import ingest_cover_letter
-
     if not body.text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
 
@@ -640,7 +647,6 @@ def list_evidence(
     source_type:       Optional[str] = None,
     evidence_strength: Optional[str] = None,
 ):
-    from app.services.evidence_bank import list_items
     with get_conn() as conn:
         items = list_items(conn, source_type=source_type,
                            evidence_strength=evidence_strength)
@@ -649,7 +655,6 @@ def list_evidence(
 
 @app.post("/api/evidence", status_code=201, response_model=EvidenceItemOut)
 def create_evidence(body: EvidenceItemIn):
-    from app.services.evidence_bank import create_item
     try:
         with get_conn() as conn:
             item = create_item(
@@ -672,7 +677,6 @@ def create_evidence(body: EvidenceItemIn):
 
 @app.put("/api/evidence/{item_id}", response_model=EvidenceItemOut)
 def update_evidence(item_id: int, body: EvidenceItemIn):
-    from app.services.evidence_bank import update_item
     try:
         with get_conn() as conn:
             item = update_item(
@@ -697,7 +701,6 @@ def update_evidence(item_id: int, body: EvidenceItemIn):
 
 @app.delete("/api/evidence/{item_id}")
 def delete_evidence(item_id: int):
-    from app.services.evidence_bank import delete_item
     with get_conn() as conn:
         deleted = delete_item(conn, item_id)
     if not deleted:
@@ -725,6 +728,9 @@ class AssessmentOut(BaseModel):
     allowed_uses:         list[str]
     is_preferred:         bool
     profile_id:           Optional[int]       = None
+    prompt_type:          Optional[str]       = None
+    prompt_version:       Optional[str]       = None
+    source_model:         Optional[str]       = None
 
 
 class AssessmentIn(BaseModel):
@@ -741,6 +747,17 @@ class AssessmentIn(BaseModel):
     confidence:           Optional[str]       = None
     allowed_uses:         list[str]  = []
     profile_id:           Optional[int]       = None
+    prompt_type:          Optional[str]       = None
+    prompt_version:       Optional[str]       = None
+    source_model:         Optional[str]       = None
+
+
+class PromptOut(BaseModel):
+    prompt_type:  str
+    version:      str
+    title:        str
+    description:  str
+    full_text:    str
 
 
 def _assessment_out(a) -> AssessmentOut:
@@ -762,12 +779,43 @@ def _assessment_out(a) -> AssessmentOut:
         allowed_uses=a.allowed_uses,
         is_preferred=a.is_preferred,
         profile_id=a.profile_id,
+        prompt_type=a.prompt_type,
+        prompt_version=a.prompt_version,
+        source_model=a.source_model,
+    )
+
+
+# ── Assessment Prompts ──────────────────────────────────────────────────────────
+
+@app.get("/api/assessment-prompts", response_model=list[PromptOut])
+def list_assessment_prompts(version: Optional[str] = None):
+    prompts = list_prompts(version or CURRENT_VERSION)
+    return [PromptOut(
+        prompt_type=p.prompt_type,
+        version=p.version,
+        title=p.title,
+        description=p.description,
+        full_text=p.full_text,
+    ) for p in prompts]
+
+
+@app.get("/api/assessment-prompts/{prompt_type}", response_model=PromptOut)
+def get_assessment_prompt(prompt_type: str, version: Optional[str] = None):
+    try:
+        p = get_prompt(prompt_type, version or CURRENT_VERSION)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return PromptOut(
+        prompt_type=p.prompt_type,
+        version=p.version,
+        title=p.title,
+        description=p.description,
+        full_text=p.full_text,
     )
 
 
 @app.get("/api/assessments/preferred", response_model=Optional[AssessmentOut])
 def get_preferred_assessment():
-    from app.services.candidate_assessment import get_preferred
     with get_conn() as conn:
         a = get_preferred(conn)
     return _assessment_out(a) if a else None
@@ -778,7 +826,6 @@ def list_assessments_route(
     source_type:     Optional[str] = None,
     assessment_kind: Optional[str] = None,
 ):
-    from app.services.candidate_assessment import list_assessments
     with get_conn() as conn:
         items = list_assessments(conn, source_type=source_type,
                                  assessment_kind=assessment_kind)
@@ -787,7 +834,6 @@ def list_assessments_route(
 
 @app.post("/api/assessments", status_code=201, response_model=AssessmentOut)
 def create_assessment_route(body: AssessmentIn):
-    from app.services.candidate_assessment import create_assessment
     try:
         with get_conn() as conn:
             a = create_assessment(
@@ -805,6 +851,9 @@ def create_assessment_route(body: AssessmentIn):
                 confidence=body.confidence,
                 allowed_uses=body.allowed_uses,
                 profile_id=body.profile_id,
+                prompt_type=body.prompt_type,
+                prompt_version=body.prompt_version,
+                source_model=body.source_model,
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -813,7 +862,6 @@ def create_assessment_route(body: AssessmentIn):
 
 @app.put("/api/assessments/{assessment_id}", response_model=AssessmentOut)
 def update_assessment_route(assessment_id: int, body: AssessmentIn):
-    from app.services.candidate_assessment import update_assessment
     try:
         with get_conn() as conn:
             a = update_assessment(
@@ -832,6 +880,9 @@ def update_assessment_route(assessment_id: int, body: AssessmentIn):
                 confidence=body.confidence,
                 allowed_uses=body.allowed_uses,
                 profile_id=body.profile_id,
+                prompt_type=body.prompt_type,
+                prompt_version=body.prompt_version,
+                source_model=body.source_model,
             )
     except ValueError as exc:
         status = 404 if "not found" in str(exc) else 422
@@ -841,7 +892,6 @@ def update_assessment_route(assessment_id: int, body: AssessmentIn):
 
 @app.delete("/api/assessments/{assessment_id}")
 def delete_assessment_route(assessment_id: int):
-    from app.services.candidate_assessment import delete_assessment
     try:
         with get_conn() as conn:
             delete_assessment(conn, assessment_id)
@@ -852,7 +902,6 @@ def delete_assessment_route(assessment_id: int):
 
 @app.post("/api/assessments/{assessment_id}/set-preferred", response_model=AssessmentOut)
 def set_preferred_route(assessment_id: int):
-    from app.services.candidate_assessment import set_preferred, get_assessment
     try:
         with get_conn() as conn:
             set_preferred(conn, assessment_id)
