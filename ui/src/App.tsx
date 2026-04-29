@@ -6,9 +6,10 @@ import { JobDetail } from './components/JobDetail'
 import { NewJobForm } from './components/NewJobForm'
 import { ProfileSetup } from './components/ProfileSetup'
 import { EvidenceBank } from './components/EvidenceBank'
+import { ProfileReconstruction } from './components/ProfileReconstruction'
 import './styles.css'
 
-type View = 'jobs' | 'new-job' | 'profile' | 'evidence'
+type View = 'jobs' | 'new-job' | 'profile' | 'evidence' | 'reconstruct'
 
 export default function App() {
   const [view, setView] = useState<View>('jobs')
@@ -104,6 +105,12 @@ export default function App() {
           >
             Evidence Bank
           </button>
+          <button
+            className={`app-nav-btn ${view === 'reconstruct' ? 'app-nav-btn--active' : ''}`}
+            onClick={() => setView('reconstruct')}
+          >
+            Reconstruct
+          </button>
         </nav>
         {view === 'jobs' && selectedId != null && (
           <button className="btn btn--ghost" onClick={handleRefresh} title="Refresh">
@@ -127,6 +134,12 @@ export default function App() {
       {view === 'evidence' && (
         <main className="main-area main-area--full">
           <EvidenceBank />
+        </main>
+      )}
+
+      {view === 'reconstruct' && (
+        <main className="main-area main-area--full">
+          <ProfileReconstruction />
         </main>
       )}
 

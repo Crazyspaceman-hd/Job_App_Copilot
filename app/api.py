@@ -37,6 +37,17 @@ from app.services.candidate_assessment import (
 from app.services.candidate_assessment_prompts import (
     get_prompt, list_prompts, CURRENT_VERSION, PROMPT_TYPES,
 )
+from app.services.profile_reconstruction import (
+    PR_SOURCE_TYPES, REVIEW_STATES,
+    ClaimCandidate, Observation, RawSource, ReconstructionResult,
+    create_source as pr_create_source,
+    delete_source as pr_delete_source,
+    generate_draft_summary as pr_draft_summary,
+    get_claim, get_observation, get_source,
+    list_claims, list_observations, list_sources,
+    promote_claim, run_reconstruction,
+    update_claim, update_observation,
+)
 
 # Initialise DB on startup (idempotent)
 init_db()
@@ -49,7 +60,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ── Pydantic response models ──────────────────────────────────────────────────
 
@@ -158,6 +168,114 @@ class CreateJobIn(BaseModel):
 class IngestTextIn(BaseModel):
     text:  str
     label: str = "default"
+
+class AssessmentPromptOut(BaseModel):
+    prompt_type: str
+    version: str
+    title: str
+    description: str
+    full_text: str
+
+
+# ── Profile Reconstruction Pydantic models ────────────────────────────────────
+
+class PRSourceIn(BaseModel):
+    raw_text:    str
+    source_type: str        = "free_text"
+    title:       str        = ""
+    label:       Optional[str] = None
+
+
+class PRSourceOut(BaseModel):
+    id:          int
+    created_at:  str
+    updated_at:  str
+    title:       str
+    raw_text:    str
+    source_type: str
+    label:       Optional[str]
+
+
+class PRObservationOut(BaseModel):
+    id:                    int
+    created_at:            str
+    updated_at:            str
+    source_id:             int
+    text:                  str
+    skill_tags:            list[str]
+    domain_tags:           list[str]
+    business_problem_tags: list[str]
+    evidence_strength:     str
+    confidence:            str
+    allowed_uses:          list[str]
+    review_state:          str
+    notes:                 Optional[str]
+
+
+class PRClaimOut(BaseModel):
+    id:               int
+    created_at:       str
+    updated_at:       str
+    observation_id:   int
+    text:             str
+    framing:          str
+    evidence_basis:   Optional[str]
+    review_state:     str
+    promoted_item_id: Optional[int]
+
+
+class PRRunOut(BaseModel):
+    source_id:         int
+    observations:      list[PRObservationOut]
+    claims:            list[PRClaimOut]
+    draft_summary:     str
+    observation_count: int
+    claim_count:       int
+
+
+class PRObservationPatch(BaseModel):
+    text:                  Optional[str]       = None
+    skill_tags:            Optional[list[str]] = None
+    domain_tags:           Optional[list[str]] = None
+    business_problem_tags: Optional[list[str]] = None
+    evidence_strength:     Optional[str]       = None
+    confidence:            Optional[str]       = None
+    allowed_uses:          Optional[list[str]] = None
+    review_state:          Optional[str]       = None
+    notes:                 Optional[str]       = None
+
+
+class PRClaimPatch(BaseModel):
+    text:         Optional[str] = None
+    framing:      Optional[str] = None
+    review_state: Optional[str] = None
+
+
+def _pr_source_out(s: RawSource) -> PRSourceOut:
+    return PRSourceOut(
+        id=s.id, created_at=s.created_at, updated_at=s.updated_at,
+        title=s.title, raw_text=s.raw_text, source_type=s.source_type, label=s.label,
+    )
+
+
+def _pr_obs_out(o: Observation) -> PRObservationOut:
+    return PRObservationOut(
+        id=o.id, created_at=o.created_at, updated_at=o.updated_at,
+        source_id=o.source_id, text=o.text,
+        skill_tags=o.skill_tags, domain_tags=o.domain_tags,
+        business_problem_tags=o.business_problem_tags,
+        evidence_strength=o.evidence_strength, confidence=o.confidence,
+        allowed_uses=o.allowed_uses, review_state=o.review_state, notes=o.notes,
+    )
+
+
+def _pr_claim_out(c: ClaimCandidate) -> PRClaimOut:
+    return PRClaimOut(
+        id=c.id, created_at=c.created_at, updated_at=c.updated_at,
+        observation_id=c.observation_id, text=c.text, framing=c.framing,
+        evidence_basis=c.evidence_basis, review_state=c.review_state,
+        promoted_item_id=c.promoted_item_id,
+    )
 
 
 # ── Helper: load full content for assets ─────────────────────────────────────
@@ -787,6 +905,7 @@ def _assessment_out(a) -> AssessmentOut:
 
 # ── Assessment Prompts ──────────────────────────────────────────────────────────
 
+
 @app.get("/api/assessment-prompts", response_model=list[PromptOut])
 def list_assessment_prompts(version: Optional[str] = None):
     prompts = list_prompts(version or CURRENT_VERSION)
@@ -909,3 +1028,140 @@ def set_preferred_route(assessment_id: int):
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Assessment {assessment_id} not found")
     return _assessment_out(a)
+
+
+# ── Profile Reconstruction routes ─────────────────────────────────────────────
+
+@app.post("/api/reconstruction/sources", status_code=201, response_model=PRSourceOut)
+def pr_create_source_route(body: PRSourceIn):
+    try:
+        with get_conn() as conn:
+            s = pr_create_source(conn, body.raw_text, body.source_type,
+                                 body.title, body.label)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return _pr_source_out(s)
+
+
+@app.get("/api/reconstruction/sources", response_model=list[PRSourceOut])
+def pr_list_sources_route():
+    with get_conn() as conn:
+        sources = list_sources(conn)
+    return [_pr_source_out(s) for s in sources]
+
+
+@app.get("/api/reconstruction/sources/{source_id}", response_model=PRSourceOut)
+def pr_get_source_route(source_id: int):
+    try:
+        with get_conn() as conn:
+            s = get_source(conn, source_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
+    return _pr_source_out(s)
+
+
+@app.delete("/api/reconstruction/sources/{source_id}")
+def pr_delete_source_route(source_id: int):
+    with get_conn() as conn:
+        deleted = pr_delete_source(conn, source_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
+    return {"ok": True, "source_id": source_id}
+
+
+@app.post("/api/reconstruction/sources/{source_id}/run", response_model=PRRunOut)
+def pr_run_route(source_id: int):
+    try:
+        with get_conn() as conn:
+            result = run_reconstruction(conn, source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return PRRunOut(
+        source_id         = result.source_id,
+        observations      = [_pr_obs_out(o) for o in result.observations],
+        claims            = [_pr_claim_out(c) for c in result.claims],
+        draft_summary     = result.draft_summary,
+        observation_count = result.observation_count,
+        claim_count       = result.claim_count,
+    )
+
+
+@app.get("/api/reconstruction/sources/{source_id}/observations",
+         response_model=list[PRObservationOut])
+def pr_list_observations_route(source_id: int):
+    with get_conn() as conn:
+        obs = list_observations(conn, source_id)
+    return [_pr_obs_out(o) for o in obs]
+
+
+@app.patch("/api/reconstruction/observations/{obs_id}",
+           response_model=PRObservationOut)
+def pr_update_observation_route(obs_id: int, body: PRObservationPatch):
+    try:
+        with get_conn() as conn:
+            o = update_observation(
+                conn, obs_id,
+                text                  = body.text,
+                skill_tags            = body.skill_tags,
+                domain_tags           = body.domain_tags,
+                business_problem_tags = body.business_problem_tags,
+                evidence_strength     = body.evidence_strength,
+                confidence            = body.confidence,
+                allowed_uses          = body.allowed_uses,
+                review_state          = body.review_state,
+                notes                 = body.notes,
+            )
+    except ValueError as exc:
+        status = 404 if "not found" in str(exc).lower() else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+    return _pr_obs_out(o)
+
+
+@app.get("/api/reconstruction/sources/{source_id}/claims",
+         response_model=list[PRClaimOut])
+def pr_list_claims_route(source_id: int):
+    with get_conn() as conn:
+        claims = list_claims(conn, source_id)
+    return [_pr_claim_out(c) for c in claims]
+
+
+@app.patch("/api/reconstruction/claims/{claim_id}", response_model=PRClaimOut)
+def pr_update_claim_route(claim_id: int, body: PRClaimPatch):
+    try:
+        with get_conn() as conn:
+            c = update_claim(
+                conn, claim_id,
+                text         = body.text,
+                framing      = body.framing,
+                review_state = body.review_state,
+            )
+    except ValueError as exc:
+        status = 404 if "not found" in str(exc).lower() else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+    return _pr_claim_out(c)
+
+
+@app.post("/api/reconstruction/claims/{claim_id}/promote")
+def pr_promote_claim_route(claim_id: int):
+    try:
+        with get_conn() as conn:
+            item = promote_claim(conn, claim_id)
+    except ValueError as exc:
+        status = 404 if "not found" in str(exc).lower() else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+    return {
+        "ok":           True,
+        "claim_id":     claim_id,
+        "evidence_item_id": item.item_id,
+        "title":        item.title,
+    }
+
+
+@app.get("/api/reconstruction/sources/{source_id}/summary")
+def pr_summary_route(source_id: int):
+    try:
+        with get_conn() as conn:
+            summary = pr_draft_summary(conn, source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {"source_id": source_id, "summary": summary}

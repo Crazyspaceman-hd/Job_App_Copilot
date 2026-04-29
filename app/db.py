@@ -240,6 +240,50 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass  # column already present
 
+    # v3.0 – Profile Reconstruction tables
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pr_sources (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+            title       TEXT    NOT NULL DEFAULT '',
+            raw_text    TEXT    NOT NULL,
+            source_type TEXT    NOT NULL DEFAULT 'free_text',
+            label       TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pr_observations (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at            TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at            TEXT    NOT NULL DEFAULT (datetime('now')),
+            source_id             INTEGER NOT NULL REFERENCES pr_sources(id) ON DELETE CASCADE,
+            text                  TEXT    NOT NULL,
+            skill_tags            TEXT    NOT NULL DEFAULT '[]',
+            domain_tags           TEXT    NOT NULL DEFAULT '[]',
+            business_problem_tags TEXT    NOT NULL DEFAULT '[]',
+            evidence_strength     TEXT    NOT NULL DEFAULT 'adjacent',
+            confidence            TEXT    NOT NULL DEFAULT 'medium',
+            allowed_uses          TEXT    NOT NULL DEFAULT '[]',
+            review_state          TEXT    NOT NULL DEFAULT 'pending',
+            notes                 TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pr_claims (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+            observation_id   INTEGER NOT NULL REFERENCES pr_observations(id) ON DELETE CASCADE,
+            text             TEXT    NOT NULL,
+            framing          TEXT    NOT NULL DEFAULT 'adjacent',
+            evidence_basis   TEXT,
+            review_state     TEXT    NOT NULL DEFAULT 'pending',
+            promoted_item_id INTEGER
+        )
+    """)
+    conn.commit()
+
 
 # Keep the private alias so any internal callers are not broken.
 _apply_migrations = apply_migrations

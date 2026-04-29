@@ -261,6 +261,66 @@ export const ASSESSMENT_ALLOWED_USE_LABELS: Record<string, string> = {
   internal:     'Internal',
 }
 
+// ── Profile Reconstruction types ───────────────────────────────────────────
+
+export interface PRSource {
+  id:          number
+  created_at:  string
+  updated_at:  string
+  title:       string
+  raw_text:    string
+  source_type: string
+  label:       string | null
+}
+
+export interface PRObservation {
+  id:                    number
+  created_at:            string
+  updated_at:            string
+  source_id:             number
+  text:                  string
+  skill_tags:            string[]
+  domain_tags:           string[]
+  business_problem_tags: string[]
+  evidence_strength:     string
+  confidence:            string
+  allowed_uses:          string[]
+  review_state:          string
+  notes:                 string | null
+}
+
+export interface PRClaim {
+  id:               number
+  created_at:       string
+  updated_at:       string
+  observation_id:   number
+  text:             string
+  framing:          string
+  evidence_basis:   string | null
+  review_state:     string
+  promoted_item_id: number | null
+}
+
+export interface PRRunResult {
+  source_id:         number
+  observations:      PRObservation[]
+  claims:            PRClaim[]
+  draft_summary:     string
+  observation_count: number
+  claim_count:       number
+}
+
+export const PR_SOURCE_TYPE_LABELS: Record<string, string> = {
+  project_note:    'Project note',
+  debugging_story: 'Debugging story',
+  old_resume:      'Old resume',
+  cover_letter:    'Cover letter',
+  assignment:      'Assignment',
+  ai_summary:      'AI summary',
+  free_text:       'Free text',
+  other:           'Other',
+}
+
 const BASE = '/api'
 
 async function get<T>(path: string): Promise<T> {
@@ -303,6 +363,19 @@ async function del<T>(path: string): Promise<T> {
   if (!r.ok) {
     const text = await r.text()
     throw new Error(`DELETE ${path} failed ${r.status}: ${text}`)
+  }
+  return r.json() as Promise<T>
+}
+
+async function patch_<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(`${BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) {
+    const text = await r.text()
+    throw new Error(`PATCH ${path} failed ${r.status}: ${text}`)
   }
   return r.json() as Promise<T>
 }
@@ -397,4 +470,37 @@ export const api = {
 
   getAssessmentPrompt: (promptType: string) =>
     get<AssessmentPrompt>(`/assessment-prompts/${promptType}`),
+
+  // ── Profile Reconstruction ─────────────────────────────────────────────────
+  createPRSource: (payload: { raw_text: string; source_type: string; title?: string; label?: string | null }) =>
+    post<PRSource>('/reconstruction/sources', payload),
+
+  listPRSources: () =>
+    get<PRSource[]>('/reconstruction/sources'),
+
+  deletePRSource: (id: number) =>
+    del<{ ok: boolean; source_id: number }>(`/reconstruction/sources/${id}`),
+
+  runPRReconstruction: (sourceId: number) =>
+    post<PRRunResult>(`/reconstruction/sources/${sourceId}/run`, {}),
+
+  listPRObservations: (sourceId: number) =>
+    get<PRObservation[]>(`/reconstruction/sources/${sourceId}/observations`),
+
+  updatePRObservation: (obsId: number, patch: Partial<PRObservation>) =>
+    patch_<PRObservation>(`/reconstruction/observations/${obsId}`, patch),
+
+  listPRClaims: (sourceId: number) =>
+    get<PRClaim[]>(`/reconstruction/sources/${sourceId}/claims`),
+
+  updatePRClaim: (claimId: number, patch: Partial<PRClaim>) =>
+    patch_<PRClaim>(`/reconstruction/claims/${claimId}`, patch),
+
+  promotePRClaim: (claimId: number) =>
+    post<{ ok: boolean; claim_id: number; evidence_item_id: number; title: string }>(
+      `/reconstruction/claims/${claimId}/promote`, {}
+    ),
+
+  getPRSummary: (sourceId: number) =>
+    get<{ source_id: number; summary: string }>(`/reconstruction/sources/${sourceId}/summary`),
 }
