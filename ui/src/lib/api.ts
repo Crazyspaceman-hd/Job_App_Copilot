@@ -128,6 +128,15 @@ export interface CreateJobResult {
   verdict:   string | null
 }
 
+export interface CreatePackageResult {
+  ok:      boolean
+  job_id:  number
+  verdict: string | null
+  steps:   Record<string, boolean>
+  errors:  Record<string, string>
+  missing: string[]
+}
+
 // Evidence Bank types
 export interface EvidenceItem {
   item_id:               number
@@ -388,6 +397,9 @@ export const api = {
 
   createJob: (payload: CreateJobPayload) =>
     post<CreateJobResult>('/jobs', payload),
+
+  createJobPackage: (payload: CreateJobPayload) =>
+    post<CreatePackageResult>('/jobs/create-package', payload),
 
   setDecision: (jobId: number, payload: DecisionPayload) =>
     post<{ ok: boolean; application_id: number }>(`/jobs/${jobId}/decision`, payload),

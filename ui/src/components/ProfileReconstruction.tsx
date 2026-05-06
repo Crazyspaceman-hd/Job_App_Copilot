@@ -5,9 +5,10 @@
  *
  * Flow:
  *   1. Input panel: paste raw text, choose source type, title, Extract
- *   2. Review panel: observations (accept/reject/edit) + claims (accept/reject/edit)
- *   3. Draft summary panel: generated from accepted observations
- *   4. Saved sources list: reload and re-review any previous session
+ *   2. Review panel: draft summary at top, then observations sorted by strength/confidence
+ *   3. Observations collapsed by default — accept/reject from compact view, expand for details
+ *   4. "Promote strong signals" bulk action: accepts + promotes direct & high-adjacent evidence
+ *   5. Saved sources list: reload and re-review any previous session
  */
 
 import { useEffect, useState } from 'react'
@@ -30,47 +31,48 @@ const CONFIDENCE_LABELS: Record<string, string> = {
   low:    'Low',
 }
 
-const ALLOWED_USES_ALL = [
-  'resume', 'cover_letter', 'interview_prep', 'project_repositioning',
-]
+const STRENGTH_ORDER: Record<string, number>    = { direct: 0, adjacent: 1, inferred: 2 }
+const CONFIDENCE_ORDER: Record<string, number>  = { high: 0, medium: 1, low: 2 }
 
-// ── Strength badge ────────────────────────────────────────────────────────────
+// ── Badges ────────────────────────────────────────────────────────────────────
 
 function StrengthBadge({ strength }: { strength: string }) {
-  const cls = `pr-strength-badge pr-strength-badge--${strength}`
-  return <span className={cls}>{STRENGTH_LABELS[strength] ?? strength}</span>
+  return <span className={`pr-strength-badge pr-strength-badge--${strength}`}>
+    {STRENGTH_LABELS[strength] ?? strength}
+  </span>
 }
 
 function ConfidenceBadge({ confidence }: { confidence: string }) {
-  const cls = `pr-confidence-badge pr-confidence-badge--${confidence}`
-  return <span className={cls}>{CONFIDENCE_LABELS[confidence] ?? confidence}</span>
+  return <span className={`pr-confidence-badge pr-confidence-badge--${confidence}`}>
+    {CONFIDENCE_LABELS[confidence] ?? confidence}
+  </span>
 }
 
 function ReviewBadge({ state }: { state: string }) {
-  const cls = `pr-review-badge pr-review-badge--${state}`
-  return <span className={cls}>{state}</span>
+  return <span className={`pr-review-badge pr-review-badge--${state}`}>{state}</span>
 }
 
 // ── Observation card ──────────────────────────────────────────────────────────
 
 interface ObsCardProps {
-  obs:      PRObservation
-  claim:    PRClaim | undefined
-  onUpdate: (id: number, patch: Partial<PRObservation>) => void
+  obs:           PRObservation
+  claim:         PRClaim | undefined
+  onUpdate:      (id: number, patch: Partial<PRObservation>) => void
   onClaimUpdate: (id: number, patch: Partial<PRClaim>) => void
-  onPromote: (claimId: number) => void
-  promoting: number | null
+  onPromote:     (claimId: number) => void
+  promoting:     number | null
 }
 
 function ObsCard({ obs, claim, onUpdate, onClaimUpdate, onPromote, promoting }: ObsCardProps) {
-  const [editing, setEditing] = useState(false)
-  const [editText, setEditText] = useState(obs.text)
-  const [editStrength, setEditStrength] = useState(obs.evidence_strength)
-  const [editConf, setEditConf] = useState(obs.confidence)
-  const [editSkills, setEditSkills] = useState(obs.skill_tags.join(', '))
-  const [editDomains, setEditDomains] = useState(obs.domain_tags.join(', '))
+  const [collapsed,     setCollapsed]     = useState(true)
+  const [editing,       setEditing]       = useState(false)
+  const [editText,      setEditText]      = useState(obs.text)
+  const [editStrength,  setEditStrength]  = useState(obs.evidence_strength)
+  const [editConf,      setEditConf]      = useState(obs.confidence)
+  const [editSkills,    setEditSkills]    = useState(obs.skill_tags.join(', '))
+  const [editDomains,   setEditDomains]   = useState(obs.domain_tags.join(', '))
   const [editClaimText, setEditClaimText] = useState(claim?.text ?? '')
-  const [claimEditing, setClaimEditing] = useState(false)
+  const [claimEditing,  setClaimEditing]  = useState(false)
 
   function saveObsEdit() {
     onUpdate(obs.id, {
@@ -90,148 +92,172 @@ function ObsCard({ obs, claim, onUpdate, onClaimUpdate, onPromote, promoting }: 
     }
   }
 
-  const isAccepted = obs.review_state === 'accepted'
-  const isRejected = obs.review_state === 'rejected'
-  const isPending  = obs.review_state === 'pending'
+  const isAccepted    = obs.review_state === 'accepted'
+  const isRejected    = obs.review_state === 'rejected'
   const claimAccepted = claim?.review_state === 'accepted'
-  const promoted   = claim?.promoted_item_id != null
+  const promoted      = claim?.promoted_item_id != null
 
   return (
     <div className={`pr-obs-card pr-obs-card--${obs.review_state}`}>
-      <div className="pr-obs-header">
-        <div className="pr-obs-badges">
-          <StrengthBadge strength={obs.evidence_strength} />
-          <ConfidenceBadge confidence={obs.confidence} />
-          <ReviewBadge state={obs.review_state} />
+
+      {/* ── Compact row: always visible ─────────────────────────────────── */}
+      <div className="pr-obs-compact">
+        <div className="pr-obs-compact-top">
+          <div className="pr-obs-badges">
+            <StrengthBadge strength={obs.evidence_strength} />
+            <ConfidenceBadge confidence={obs.confidence} />
+            <ReviewBadge state={obs.review_state} />
+            {promoted && <span className="pr-promoted-badge">✓ Bank</span>}
+          </div>
+          <div className="pr-obs-quick-actions">
+            {!isAccepted && !isRejected && (
+              <button className="btn btn--xs btn--success"
+                onClick={() => onUpdate(obs.id, { review_state: 'accepted' })}>
+                Accept
+              </button>
+            )}
+            {!isRejected && (
+              <button className="btn btn--xs btn--danger"
+                onClick={() => onUpdate(obs.id, { review_state: 'rejected' })}>
+                Reject
+              </button>
+            )}
+            {isRejected && (
+              <button className="btn btn--xs"
+                onClick={() => onUpdate(obs.id, { review_state: 'pending' })}>
+                Restore
+              </button>
+            )}
+            {claimAccepted && !promoted && (
+              <button className="btn btn--xs btn--primary"
+                disabled={promoting === claim!.id}
+                onClick={() => onPromote(claim!.id)}>
+                {promoting === claim!.id ? '…' : '→ Bank'}
+              </button>
+            )}
+            <button className="btn btn--xs btn--ghost"
+              onClick={() => setCollapsed(v => !v)}
+              title={collapsed ? 'Expand' : 'Collapse'}>
+              {collapsed ? '▾' : '▴'}
+            </button>
+          </div>
         </div>
-        <div className="pr-obs-actions">
-          {!isAccepted && !isRejected && (
-            <button className="btn btn--xs btn--success"
-              onClick={() => onUpdate(obs.id, { review_state: 'accepted' })}>
-              Accept
-            </button>
-          )}
-          {!isRejected && (
-            <button className="btn btn--xs btn--danger"
-              onClick={() => onUpdate(obs.id, { review_state: 'rejected' })}>
-              Reject
-            </button>
-          )}
-          {isRejected && (
-            <button className="btn btn--xs"
-              onClick={() => onUpdate(obs.id, { review_state: 'pending' })}>
-              Restore
-            </button>
-          )}
-          <button className="btn btn--xs btn--ghost" onClick={() => setEditing(e => !e)}>
-            {editing ? 'Cancel edit' : 'Edit'}
-          </button>
-        </div>
+        <p className="pr-obs-text" onClick={() => setCollapsed(v => !v)}
+          style={{ cursor: 'pointer' }}>
+          {obs.text}
+        </p>
       </div>
 
-      {editing ? (
-        <div className="pr-obs-edit">
-          <label className="pr-label">Observation text</label>
-          <textarea className="pr-textarea"
-            value={editText} rows={3}
-            onChange={e => setEditText(e.target.value)} />
-          <div className="pr-edit-row">
-            <label className="pr-label">Strength</label>
-            <select className="pr-select" value={editStrength}
-              onChange={e => setEditStrength(e.target.value)}>
-              <option value="direct">Direct</option>
-              <option value="adjacent">Adjacent</option>
-              <option value="inferred">Inferred</option>
-            </select>
-            <label className="pr-label">Confidence</label>
-            <select className="pr-select" value={editConf}
-              onChange={e => setEditConf(e.target.value)}>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
+      {/* ── Expanded content ─────────────────────────────────────────────── */}
+      {!collapsed && (
+        <div className="pr-obs-expanded">
+          {obs.skill_tags.length > 0 && (
+            <div className="pr-tag-row">
+              {obs.skill_tags.map(t => (
+                <span key={t} className="pr-tag pr-tag--skill">{t}</span>
+              ))}
+              {obs.domain_tags.map(t => (
+                <span key={t} className="pr-tag pr-tag--domain">{t}</span>
+              ))}
+            </div>
+          )}
+
+          <div>
+            <button className="btn btn--xs btn--ghost" onClick={() => setEditing(e => !e)}>
+              {editing ? 'Cancel edit' : 'Edit observation'}
+            </button>
           </div>
-          <label className="pr-label">Skill tags (comma-separated)</label>
-          <input className="pr-input" value={editSkills}
-            onChange={e => setEditSkills(e.target.value)} />
-          <label className="pr-label">Domain tags (comma-separated)</label>
-          <input className="pr-input" value={editDomains}
-            onChange={e => setEditDomains(e.target.value)} />
-          <button className="btn btn--sm btn--primary" onClick={saveObsEdit}>
-            Save observation
-          </button>
-        </div>
-      ) : (
-        <p className="pr-obs-text">{obs.text}</p>
-      )}
 
-      {obs.skill_tags.length > 0 && (
-        <div className="pr-tag-row">
-          {obs.skill_tags.map(t => (
-            <span key={t} className="pr-tag pr-tag--skill">{t}</span>
-          ))}
-          {obs.domain_tags.map(t => (
-            <span key={t} className="pr-tag pr-tag--domain">{t}</span>
-          ))}
-        </div>
-      )}
-
-      {/* Claim sub-card */}
-      {claim && !isRejected && (
-        <div className="pr-claim-sub">
-          <div className="pr-claim-header">
-            <span className="pr-claim-label">Claim candidate</span>
-            <span className={`pr-framing-badge pr-framing-badge--${claim.framing}`}>
-              {claim.framing}
-            </span>
-            <ReviewBadge state={claim.review_state} />
-            <div className="pr-claim-actions">
-              {claim.review_state !== 'accepted' && (
-                <button className="btn btn--xs btn--success"
-                  onClick={() => onClaimUpdate(claim.id, { review_state: 'accepted' })}>
-                  Accept claim
-                </button>
-              )}
-              {claim.review_state !== 'rejected' && claim.review_state !== 'pending' && (
-                <button className="btn btn--xs btn--danger"
-                  onClick={() => onClaimUpdate(claim.id, { review_state: 'rejected' })}>
-                  Reject
-                </button>
-              )}
-              {claim.review_state === 'rejected' && (
-                <button className="btn btn--xs"
-                  onClick={() => onClaimUpdate(claim.id, { review_state: 'pending' })}>
-                  Restore
-                </button>
-              )}
-              {claimAccepted && !promoted && (
-                <button
-                  className="btn btn--xs btn--primary"
-                  disabled={promoting === claim.id}
-                  onClick={() => onPromote(claim.id)}>
-                  {promoting === claim.id ? 'Promoting…' : '→ Evidence Bank'}
-                </button>
-              )}
-              {promoted && (
-                <span className="pr-promoted-badge">✓ In Evidence Bank</span>
-              )}
-              <button className="btn btn--xs btn--ghost"
-                onClick={() => setClaimEditing(ce => !ce)}>
-                {claimEditing ? 'Cancel' : 'Edit'}
+          {editing && (
+            <div className="pr-obs-edit">
+              <label className="pr-label">Observation text</label>
+              <textarea className="pr-textarea" value={editText} rows={3}
+                onChange={e => setEditText(e.target.value)} />
+              <div className="pr-edit-row">
+                <label className="pr-label">Strength</label>
+                <select className="pr-select" value={editStrength}
+                  onChange={e => setEditStrength(e.target.value)}>
+                  <option value="direct">Direct</option>
+                  <option value="adjacent">Adjacent</option>
+                  <option value="inferred">Inferred</option>
+                </select>
+                <label className="pr-label">Confidence</label>
+                <select className="pr-select" value={editConf}
+                  onChange={e => setEditConf(e.target.value)}>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <label className="pr-label">Skill tags (comma-separated)</label>
+              <input className="pr-input" value={editSkills}
+                onChange={e => setEditSkills(e.target.value)} />
+              <label className="pr-label">Domain tags (comma-separated)</label>
+              <input className="pr-input" value={editDomains}
+                onChange={e => setEditDomains(e.target.value)} />
+              <button className="btn btn--sm btn--primary" onClick={saveObsEdit}>
+                Save observation
               </button>
             </div>
-          </div>
-          {claimEditing ? (
-            <div className="pr-claim-edit">
-              <textarea className="pr-textarea" rows={2}
-                value={editClaimText}
-                onChange={e => setEditClaimText(e.target.value)} />
-              <button className="btn btn--sm btn--primary" onClick={saveClaimEdit}>
-                Save claim
-              </button>
+          )}
+
+          {/* Claim sub-card */}
+          {claim && !isRejected && (
+            <div className="pr-claim-sub">
+              <div className="pr-claim-header">
+                <span className="pr-claim-label">Claim candidate</span>
+                <span className={`pr-framing-badge pr-framing-badge--${claim.framing}`}>
+                  {claim.framing}
+                </span>
+                <ReviewBadge state={claim.review_state} />
+                <div className="pr-claim-actions">
+                  {claim.review_state !== 'accepted' && (
+                    <button className="btn btn--xs btn--success"
+                      onClick={() => onClaimUpdate(claim.id, { review_state: 'accepted' })}>
+                      Accept claim
+                    </button>
+                  )}
+                  {claim.review_state !== 'rejected' && claim.review_state !== 'pending' && (
+                    <button className="btn btn--xs btn--danger"
+                      onClick={() => onClaimUpdate(claim.id, { review_state: 'rejected' })}>
+                      Reject
+                    </button>
+                  )}
+                  {claim.review_state === 'rejected' && (
+                    <button className="btn btn--xs"
+                      onClick={() => onClaimUpdate(claim.id, { review_state: 'pending' })}>
+                      Restore
+                    </button>
+                  )}
+                  {claimAccepted && !promoted && (
+                    <button className="btn btn--xs btn--primary"
+                      disabled={promoting === claim.id}
+                      onClick={() => onPromote(claim.id)}>
+                      {promoting === claim.id ? 'Promoting…' : '→ Evidence Bank'}
+                    </button>
+                  )}
+                  {promoted && (
+                    <span className="pr-promoted-badge">✓ In Evidence Bank</span>
+                  )}
+                  <button className="btn btn--xs btn--ghost"
+                    onClick={() => setClaimEditing(ce => !ce)}>
+                    {claimEditing ? 'Cancel' : 'Edit'}
+                  </button>
+                </div>
+              </div>
+              {claimEditing ? (
+                <div className="pr-claim-edit">
+                  <textarea className="pr-textarea" rows={2}
+                    value={editClaimText}
+                    onChange={e => setEditClaimText(e.target.value)} />
+                  <button className="btn btn--sm btn--primary" onClick={saveClaimEdit}>
+                    Save claim
+                  </button>
+                </div>
+              ) : (
+                <p className="pr-claim-text">{claim.text}</p>
+              )}
             </div>
-          ) : (
-            <p className="pr-claim-text">{claim.text}</p>
           )}
         </div>
       )}
@@ -272,7 +298,7 @@ function InputPanel({ onExtracted }: InputPanelProps) {
       <h2 className="pr-section-title">Paste evidence</h2>
       <p className="pr-hint">
         Paste raw notes, an old resume, a debugging story, project descriptions — anything that
-        captures real professional experience.  The extractor will identify observable claims
+        captures real professional experience. The extractor will identify observable claims
         without inventing or inflating them.
       </p>
 
@@ -313,8 +339,8 @@ function InputPanel({ onExtracted }: InputPanelProps) {
 // ── Review panel ──────────────────────────────────────────────────────────────
 
 interface ReviewPanelProps {
-  run:      PRRunResult
-  onReset:  () => void
+  run:     PRRunResult
+  onReset: () => void
 }
 
 function ReviewPanel({ run: initialRun, onReset }: ReviewPanelProps) {
@@ -322,6 +348,7 @@ function ReviewPanel({ run: initialRun, onReset }: ReviewPanelProps) {
   const [claims,       setClaims]       = useState<PRClaim[]>(initialRun.claims)
   const [summary,      setSummary]      = useState(initialRun.draft_summary)
   const [promoting,    setPromoting]    = useState<number | null>(null)
+  const [bulkRunning,  setBulkRunning]  = useState(false)
   const [promoteMsg,   setPromoteMsg]   = useState<string | null>(null)
   const [filter,       setFilter]       = useState<'all' | 'pending' | 'accepted' | 'rejected'>('all')
 
@@ -368,7 +395,57 @@ function ReviewPanel({ run: initialRun, onReset }: ReviewPanelProps) {
     }
   }
 
-  async function acceptAll() {
+  // ── Bulk: accept + promote all direct & high-adjacent observations ──────────
+  async function promoteStrongSignals() {
+    setBulkRunning(true)
+    setPromoteMsg(null)
+    let count = 0
+
+    const strongObs = observations.filter(o =>
+      o.review_state !== 'rejected' &&
+      (o.evidence_strength === 'direct' ||
+       (o.evidence_strength === 'adjacent' && o.confidence === 'high'))
+    )
+
+    for (const obs of strongObs) {
+      const claim = claimByObsId[obs.id]
+      if (!claim || claim.promoted_item_id != null) continue
+
+      // Accept observation
+      if (obs.review_state !== 'accepted') {
+        try {
+          const updated = await api.updatePRObservation(obs.id, { review_state: 'accepted' })
+          updateObs(obs.id, updated)
+        } catch { continue }
+      }
+
+      // Accept claim
+      if (claim.review_state !== 'accepted') {
+        try {
+          const updated = await api.updatePRClaim(claim.id, { review_state: 'accepted' })
+          updateClaim(claim.id, updated)
+        } catch { continue }
+      }
+
+      // Promote
+      try {
+        const result = await api.promotePRClaim(claim.id)
+        setClaims(prev => prev.map(c =>
+          c.id === claim.id ? { ...c, promoted_item_id: result.evidence_item_id } : c
+        ))
+        count++
+      } catch { /* already promoted or server error — skip */ }
+    }
+
+    setBulkRunning(false)
+    setPromoteMsg(
+      count > 0
+        ? `${count} strong signal${count !== 1 ? 's' : ''} added to Evidence Bank.`
+        : 'No new strong signals to promote.'
+    )
+  }
+
+  async function acceptAllPending() {
     const pending = observations.filter(o => o.review_state === 'pending')
     for (const obs of pending) {
       await handleObsUpdate(obs.id, { review_state: 'accepted' })
@@ -379,18 +456,54 @@ function ReviewPanel({ run: initialRun, onReset }: ReviewPanelProps) {
     }
   }
 
-  const visibleObs = filter === 'all'
-    ? observations
-    : observations.filter(o => o.review_state === filter)
+  // Sort: direct before adjacent before inferred; high before medium before low
+  const sortObs = (list: PRObservation[]) =>
+    [...list].sort((a, b) => {
+      const sd = (STRENGTH_ORDER[a.evidence_strength] ?? 3) - (STRENGTH_ORDER[b.evidence_strength] ?? 3)
+      if (sd !== 0) return sd
+      return (CONFIDENCE_ORDER[a.confidence] ?? 3) - (CONFIDENCE_ORDER[b.confidence] ?? 3)
+    })
 
-  const accepted  = observations.filter(o => o.review_state === 'accepted').length
-  const rejected  = observations.filter(o => o.review_state === 'rejected').length
-  const pending   = observations.filter(o => o.review_state === 'pending').length
-  const promoted  = claims.filter(c => c.promoted_item_id != null).length
+  const visibleObs = sortObs(
+    filter === 'all'
+      ? observations
+      : observations.filter(o => o.review_state === filter)
+  )
+
+  const accepted = observations.filter(o => o.review_state === 'accepted').length
+  const rejected = observations.filter(o => o.review_state === 'rejected').length
+  const pending  = observations.filter(o => o.review_state === 'pending').length
+  const promoted = claims.filter(c => c.promoted_item_id != null).length
+
+  const strongCount = observations.filter(o =>
+    o.review_state !== 'rejected' &&
+    (o.evidence_strength === 'direct' ||
+     (o.evidence_strength === 'adjacent' && o.confidence === 'high'))
+  ).filter(o => {
+    const c = claimByObsId[o.id]
+    return c && c.promoted_item_id == null
+  }).length
 
   return (
     <div className="pr-review-panel">
-      {/* Stats bar */}
+
+      {/* Draft summary — front and centre */}
+      <div className="pr-summary-box">
+        <div className="pr-summary-header">
+          <h3 className="pr-summary-title">Draft profile summary</h3>
+          <button className="btn btn--xs btn--ghost"
+            onClick={() => {
+              api.getPRSummary(initialRun.source_id)
+                .then(r => setSummary(r.summary))
+                .catch(() => {})
+            }}>
+            Refresh
+          </button>
+        </div>
+        <p className="pr-summary-text">{summary}</p>
+      </div>
+
+      {/* Stats + bulk actions */}
       <div className="pr-stats-bar">
         <span className="pr-stat">{observations.length} observations</span>
         <span className="pr-stat pr-stat--accepted">{accepted} accepted</span>
@@ -398,7 +511,17 @@ function ReviewPanel({ run: initialRun, onReset }: ReviewPanelProps) {
         <span className="pr-stat">{pending} pending</span>
         <span className="pr-stat pr-stat--promoted">{promoted} promoted</span>
         <div className="pr-stats-actions">
-          <button className="btn btn--sm" onClick={acceptAll}>Accept all pending</button>
+          {strongCount > 0 && (
+            <button
+              className="btn btn--sm btn--primary"
+              disabled={bulkRunning}
+              onClick={promoteStrongSignals}
+              title="Accept and promote all direct and high-confidence adjacent observations"
+            >
+              {bulkRunning ? 'Promoting…' : `Promote strong signals (${strongCount})`}
+            </button>
+          )}
+          <button className="btn btn--sm" onClick={acceptAllPending}>Accept all pending</button>
           <button className="btn btn--sm btn--ghost" onClick={onReset}>New evidence</button>
         </div>
       </div>
@@ -432,20 +555,6 @@ function ReviewPanel({ run: initialRun, onReset }: ReviewPanelProps) {
             promoting={promoting}
           />
         ))}
-      </div>
-
-      {/* Draft summary */}
-      <div className="pr-summary-box">
-        <h3 className="pr-summary-title">Draft profile summary</h3>
-        <p className="pr-summary-text">{summary}</p>
-        <button className="btn btn--sm btn--ghost"
-          onClick={() => {
-            api.getPRSummary(initialRun.source_id)
-              .then(r => setSummary(r.summary))
-              .catch(() => {})
-          }}>
-          Refresh summary
-        </button>
       </div>
     </div>
   )

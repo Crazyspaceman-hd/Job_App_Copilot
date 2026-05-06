@@ -703,6 +703,53 @@ a { color: #1a5a8a; }
   font-size: 0.9rem;
 }
 
+/* ── Details toggle (NewJobForm) ────────────────────────────────────────────── */
+.details-toggle {
+  background: none;
+  border: none;
+  color: #1a5a8a;
+  font-size: 0.83rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.details-toggle:hover { color: #0f3f6a; }
+
+/* ── Package steps (NewJobForm result summary) ───────────────────────────────── */
+.pkg-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 1rem 0;
+}
+
+.pkg-step {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+}
+.pkg-step--ok   { background: #f0fdf4; color: #15803d; }
+.pkg-step--err  { background: #fef2f2; color: #b91c1c; }
+.pkg-step--skip { background: #f9fafb; color: #6b7280; }
+
+.pkg-step-icon  { font-weight: 700; width: 1rem; flex-shrink: 0; }
+.pkg-step-label { font-weight: 500; }
+.pkg-step-msg   { font-size: 0.8rem; opacity: 0.8; }
+
+.pkg-missing {
+  font-size: 0.82rem;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.5rem;
+}
+
 /* ── Completeness / ingest status pills ────────────────────────────────────── */
 .completeness-pill {
   display: inline-block;
@@ -1476,6 +1523,19 @@ a { color: #1a5a8a; }
 .pr-obs-card--rejected { border-left: 3px solid #dc2626; opacity: 0.65; }
 .pr-obs-card--pending  { border-left: 3px solid #d1d5db; }
 
+/* Compact obs layout */
+.pr-obs-compact { display: flex; flex-direction: column; gap: 0.4rem; }
+.pr-obs-compact-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.pr-obs-quick-actions { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; }
+.pr-obs-expanded { display: flex; flex-direction: column; gap: 0.55rem; padding-top: 0.4rem; border-top: 1px solid #ececec; }
+
+/* Legacy header (kept for any remaining references) */
 .pr-obs-header {
   display: flex;
   justify-content: space-between;
@@ -1599,6 +1659,7 @@ a { color: #1a5a8a; }
   flex-direction: column;
   gap: 0.5rem;
 }
+.pr-summary-header { display: flex; justify-content: space-between; align-items: center; }
 .pr-summary-title { font-size: 0.85rem; font-weight: 600; color: #1e3a5f; }
 .pr-summary-text  { font-size: 0.85rem; color: #1e3a5f; line-height: 1.65; }
 

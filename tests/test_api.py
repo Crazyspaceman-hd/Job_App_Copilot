@@ -1011,3 +1011,121 @@ def test_prompt_full_text_contains_output_schema(client):
     r = client.get("/api/assessment-prompts/growth_assessment")
     assert '"strengths"' in r.json()["full_text"]
     assert '"confidence"' in r.json()["full_text"]
+
+
+# ── POST /api/jobs/create-package ─────────────────────────────────────────────
+
+def test_create_package_returns_201(client):
+    r = client.post("/api/jobs/create-package", json={"raw_text": "Software Engineer at Acme. Python, SQL required."})
+    assert r.status_code == 201
+
+
+def test_create_package_response_shape(client):
+    r = client.post("/api/jobs/create-package", json={"raw_text": "Software Engineer at Acme. Python required."})
+    data = r.json()
+    assert data["ok"] is True
+    assert isinstance(data["job_id"], int)
+    assert "verdict" in data
+    assert "steps" in data
+    assert "errors" in data
+    assert "missing" in data
+
+
+def test_create_package_steps_keys(client):
+    r = client.post("/api/jobs/create-package", json={"raw_text": "Engineer role. Python, Django required."})
+    steps = r.json()["steps"]
+    assert "extract" in steps
+    assert "assess" in steps
+    assert "resume" in steps
+    assert "cover_letter" in steps
+    assert "project" in steps
+
+
+def test_create_package_extract_succeeds(client):
+    """Extraction always runs regardless of profile availability."""
+    r = client.post("/api/jobs/create-package", json={"raw_text": "Python developer. 3+ years required. REST APIs."})
+    data = r.json()
+    assert data["steps"]["extract"] is True
+
+
+def test_create_package_no_profile_adds_to_missing(client, monkeypatch):
+    """Without a profile, 'profile' appears in missing and downstream steps are skipped."""
+    from app import api as api_module
+
+    def _raise_no_profile(*a, **kw):
+        raise FileNotFoundError("no profile")
+
+    # Patch the api-module-level reference (used by create_job_package)
+    monkeypatch.setattr(api_module, "load_profile", _raise_no_profile)
+
+    r = client.post("/api/jobs/create-package", json={"raw_text": "Software Engineer needed."})
+    data = r.json()
+    assert "profile" in data["missing"]
+    assert data["steps"]["assess"] is False
+    assert data["steps"]["resume"] is False
+    assert data["steps"]["cover_letter"] is False
+
+
+def test_create_package_empty_text_422(client):
+    r = client.post("/api/jobs/create-package", json={"raw_text": "   "})
+    assert r.status_code == 422
+
+
+def test_create_package_missing_text_422(client):
+    r = client.post("/api/jobs/create-package", json={})
+    assert r.status_code == 422
+
+
+def test_create_package_creates_job_in_db(client, setup_conn):
+    r = client.post("/api/jobs/create-package", json={"raw_text": "Django developer wanted.", "company": "Widgets Inc"})
+    job_id = r.json()["job_id"]
+    row = setup_conn.execute("SELECT company FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    assert row is not None
+    assert row["company"] == "Widgets Inc"
+
+
+def test_create_package_metadata_optional(client):
+    """All metadata fields are optional — only raw_text is required."""
+    r = client.post("/api/jobs/create-package", json={
+        "raw_text": "Go backend engineer. Kubernetes experience preferred.",
+        "title": "Backend Engineer",
+        "location": "Remote",
+        "remote_policy": "remote",
+    })
+    assert r.status_code == 201
+    assert r.json()["steps"]["extract"] is True
+
+
+def test_create_package_base_resume_missing_goes_to_missing(client, tmp_path, monkeypatch):
+    """Profile present but no ingested resume → base_resume in missing list."""
+    import json as _json
+
+    # Write a minimal filled profile so load_profile doesn't raise
+    profile_path = tmp_path / "candidate_profile.json"
+    profile_path.write_text(_json.dumps({
+        "version": "1.1",
+        "personal": {"name": "Test User", "location": "Remote", "linkedin": "", "github": ""},
+        "job_targets": {
+            "titles": ["Software Engineer"],
+            "seniority_self_assessed": "mid",
+            "desired_remote_policy": "remote",
+            "willing_to_relocate": False,
+            "work_authorization": "US citizen",
+        },
+        "skills": {"languages": [], "frameworks": [], "databases": [], "cloud": [], "tools": [], "practices": []},
+        "domains": [],
+    }), encoding="utf-8")
+
+    from app.services import profile_loader as pl
+    orig = pl.DEFAULT_PROFILE
+    monkeypatch.setattr(pl, "DEFAULT_PROFILE", profile_path)
+
+    from app import api as api_module
+    # also patch the api module's load_profile reference
+    monkeypatch.setattr(api_module, "DEFAULT_PROFILE", profile_path, raising=False)
+
+    r = client.post("/api/jobs/create-package", json={"raw_text": "Python senior engineer. FastAPI, PostgreSQL required."})
+    data = r.json()
+    # Profile loaded → assess attempted; no base resume → that goes to missing
+    assert "base_resume" in data["missing"]
+    assert data["steps"]["resume"] is False
