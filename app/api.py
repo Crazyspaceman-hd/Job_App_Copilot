@@ -608,6 +608,147 @@ def create_job(body: CreateJobIn):
 
 # ── Fast-path package creation ────────────────────────────────────────────────
 
+@app.post("/api/jobs/{job_id}/rerun")
+def rerun_job_package(job_id: int):
+    """
+    Re-run the full pipeline (extract → assess → resume → cover letter →
+    project recs) for an existing job.  Uses the job's stored raw_text.
+    Returns the same shape as create-package: {ok, job_id, verdict, steps, errors, missing}.
+    """
+    from app.services.extractor import extract, persist_extraction
+    from app.services.scorer import assess, persist_assessment
+    from app.services.project_loader import load_projects, extract_project_skills
+    from app.services.resume_tailor import generate_targeted_resume
+    from app.services.cover_letter import generate_targeted_cover_letter
+    from app.services.base_asset_ingest import load_latest_base_resume, load_latest_cover_letter
+    from app.services.project_recommender import recommend_project as _recommend_proj
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT raw_text, remote_policy FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    raw    = row["raw_text"]
+    remote = row["remote_policy"] or "unknown"
+
+    steps:   dict[str, bool] = {
+        "extract": False, "assess": False,
+        "resume": False, "cover_letter": False, "project": False,
+    }
+    errors:  dict[str, str] = {}
+    missing: list[str]      = []
+    verdict   = None
+    extracted = None
+
+    # 1. Extract requirements
+    try:
+        extracted = extract(job_id, raw)
+        with get_conn() as conn:
+            persist_extraction(conn, extracted)
+        steps["extract"] = True
+    except Exception as exc:
+        errors["extract"] = str(exc)
+
+    # 2. Load profile
+    profile  = None
+    projects = []
+    try:
+        profile = load_profile(None)
+    except (FileNotFoundError, ValueError):
+        missing.append("profile")
+    except Exception as exc:
+        errors["assess"] = f"Profile load: {exc}"
+
+    if profile is not None:
+        try:
+            projects = load_projects(None)
+        except Exception:
+            pass
+
+    # 3. Assess fit
+    if profile is not None:
+        try:
+            proj_skills   = extract_project_skills(projects)
+            prof_complete = completeness(profile)
+            result = assess(
+                job_raw_text=raw, job_remote_policy=remote,
+                profile=profile, project_skills=proj_skills,
+                profile_complete=prof_complete, extracted=extracted,
+            )
+            with get_conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO candidate_profiles (version, profile_json) VALUES (?, ?)",
+                    (profile.get("version", "1.0"), json.dumps(profile)),
+                )
+                persist_assessment(conn, job_id, cur.lastrowid, result)
+            steps["assess"] = True
+            verdict = result.verdict
+        except Exception as exc:
+            errors["assess"] = str(exc)
+
+    # 4. Generate resume
+    if profile is not None:
+        try:
+            with get_conn() as conn:
+                base_resume = load_latest_base_resume(conn, resume_id=None)
+            if not base_resume:
+                missing.append("base_resume")
+            else:
+                with get_conn() as conn:
+                    generate_targeted_resume(
+                        job_id=job_id, conn=conn, profile=profile,
+                        base_resume=base_resume, extracted=extracted, label="targeted",
+                    )
+                steps["resume"] = True
+        except Exception as exc:
+            errors["resume"] = str(exc)
+
+    # 5. Generate cover letter
+    if profile is not None:
+        try:
+            with get_conn() as conn:
+                base_cl     = load_latest_cover_letter(conn, cl_id=None)
+                base_resume = load_latest_base_resume(conn, resume_id=None)
+            if not base_cl:
+                missing.append("base_cover_letter")
+            else:
+                with get_conn() as conn:
+                    generate_targeted_cover_letter(
+                        job_id=job_id, conn=conn, profile=profile,
+                        base_cl=base_cl, extracted=extracted,
+                        base_resume=base_resume, label="targeted",
+                    )
+                steps["cover_letter"] = True
+        except Exception as exc:
+            errors["cover_letter"] = str(exc)
+
+    # 6. Project recommendations
+    if profile is not None:
+        if not projects:
+            missing.append("projects")
+        else:
+            try:
+                with get_conn() as conn:
+                    _recommend_proj(
+                        job_id=job_id, conn=conn, profile=profile,
+                        extracted=extracted, projects=projects, label="targeted",
+                    )
+                steps["project"] = True
+            except Exception as exc:
+                errors["project"] = str(exc)
+
+    return {
+        "ok":      True,
+        "job_id":  job_id,
+        "verdict": verdict,
+        "steps":   steps,
+        "errors":  errors,
+        "missing": missing,
+    }
+
+
 @app.post("/api/jobs/create-package", status_code=201)
 def create_job_package(body: CreatePackageIn):
     """

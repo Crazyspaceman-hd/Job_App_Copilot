@@ -436,6 +436,9 @@ export const api = {
       `/jobs/${jobId}/recommend-project`, { label }
     ),
 
+  rerunPackage: (jobId: number) =>
+    post<CreatePackageResult>(`/jobs/${jobId}/rerun`, {}),
+
   // ── Profile ────────────────────────────────────────────────────────────────
   getProfile: () => get<CandidateProfile>('/profile'),
 

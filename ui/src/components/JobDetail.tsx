@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Package, DecisionPayload } from '../lib/api'
+import type { Package, DecisionPayload, CreatePackageResult } from '../lib/api'
 import { api } from '../lib/api'
 import { FitPanel } from './FitPanel'
 import { AssetPanel } from './AssetPanel'
@@ -7,6 +7,56 @@ import { ProjectsPanel } from './ProjectsPanel'
 import { StatusForm } from './StatusForm'
 
 type Tab = 'fit' | 'resume' | 'cover_letter' | 'projects'
+
+const STEP_LABELS: Record<string, string> = {
+  extract:      'Requirements extracted',
+  assess:       'Fit assessed',
+  resume:       'Resume generated',
+  cover_letter: 'Cover letter generated',
+  project:      'Project recommendations',
+}
+
+const MISSING_LABELS: Record<string, string> = {
+  profile:           'candidate profile',
+  base_resume:       'ingested resume',
+  base_cover_letter: 'ingested cover letter',
+  projects:          'projects file',
+}
+
+function RerunResults({ result, onDismiss }: { result: CreatePackageResult; onDismiss: () => void }) {
+  const totalOk = Object.values(result.steps).filter(Boolean).length
+  return (
+    <div className="rerun-results">
+      <div className="rerun-results-header">
+        <span className="rerun-results-summary">
+          Re-run complete — {totalOk}/{Object.keys(result.steps).length} steps succeeded.
+          {result.verdict && <> Verdict: <strong>{result.verdict}</strong>.</>}
+        </span>
+        <button className="btn btn--ghost btn--sm" onClick={onDismiss}>Dismiss</button>
+      </div>
+      <div className="pkg-steps">
+        {Object.entries(STEP_LABELS).map(([key, label]) => {
+          const ok  = result.steps[key]
+          const err = result.errors[key]
+          const icon = ok ? '✓' : (err ? '✗' : '—')
+          const cls  = ok ? 'pkg-step--ok' : (err ? 'pkg-step--err' : 'pkg-step--skip')
+          return (
+            <div key={key} className={`pkg-step ${cls}`}>
+              <span className="pkg-step-icon">{icon}</span>
+              <span className="pkg-step-label">{label}</span>
+              {err && <span className="pkg-step-msg">{err}</span>}
+            </div>
+          )
+        })}
+      </div>
+      {result.missing.length > 0 && (
+        <p className="pkg-missing">
+          Missing: {result.missing.map(k => MISSING_LABELS[k] ?? k).join(', ')}.
+        </p>
+      )}
+    </div>
+  )
+}
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'fit',          label: 'Fit' },
@@ -41,6 +91,24 @@ export function JobDetail({ pkg, onRefresh }: Props) {
   const [genLoading, setGenLoading] = useState<Tab | null>(null)
   const [decErr, setDecErr]       = useState<string | null>(null)
   const [decSaving, setDecSaving] = useState(false)
+  const [rerunning, setRerunning]   = useState(false)
+  const [rerunResult, setRerunResult] = useState<CreatePackageResult | null>(null)
+  const [rerunErr, setRerunErr]     = useState<string | null>(null)
+
+  async function rerun() {
+    setRerunning(true)
+    setRerunErr(null)
+    setRerunResult(null)
+    try {
+      const result = await api.rerunPackage(pkg.job_id)
+      setRerunResult(result)
+      onRefresh()
+    } catch (e: unknown) {
+      setRerunErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRerunning(false)
+    }
+  }
 
   async function generate(kind: 'resume' | 'cover_letter' | 'projects') {
     setGenErr(null)
@@ -102,9 +170,21 @@ export function JobDetail({ pkg, onRefresh }: Props) {
               {appStatus.charAt(0).toUpperCase() + appStatus.slice(1)}
             </span>
           )}
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={rerun}
+            disabled={rerunning}
+            title="Re-run extraction, fit assessment, and document generation"
+          >
+            {rerunning ? 'Re-running…' : '↺ Re-run'}
+          </button>
         </div>
       </div>
 
+      {rerunErr && <div className="form-error" style={{ margin: '0 0 0.75rem' }}>{rerunErr}</div>}
+      {rerunResult && (
+        <RerunResults result={rerunResult} onDismiss={() => setRerunResult(null)} />
+      )}
       {genErr && <div className="form-error" style={{ margin: '0 0 0.75rem' }}>{genErr}</div>}
 
       {/* ── Tabs ────────────────────────────────────────────────────────── */}

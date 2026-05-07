@@ -1732,6 +1732,28 @@ a { color: #1a5a8a; }
 }
 .btn--danger:hover  { background: #b91c1c; }
 
+/* ── Re-run results banner ──────────────────────────────────────────────────── */
+
+.rerun-results {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.9rem;
+}
+.rerun-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+.rerun-results-summary {
+  font-size: 0.85rem;
+  color: #334155;
+}
+
 /* ── Profile Synthesis — skill chip editor ─────────────────────────────────── */
 
 .synthesis-banner {
