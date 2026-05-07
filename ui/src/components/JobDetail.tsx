@@ -83,17 +83,33 @@ const STATUS_BADGE_COLOR: Record<string, string> = {
 interface Props {
   pkg: Package
   onRefresh: () => void
+  onDelete:  (jobId: number) => Promise<void>
 }
 
-export function JobDetail({ pkg, onRefresh }: Props) {
+export function JobDetail({ pkg, onRefresh, onDelete }: Props) {
   const [tab, setTab]             = useState<Tab>('fit')
   const [genErr, setGenErr]       = useState<string | null>(null)
   const [genLoading, setGenLoading] = useState<Tab | null>(null)
   const [decErr, setDecErr]       = useState<string | null>(null)
   const [decSaving, setDecSaving] = useState(false)
-  const [rerunning, setRerunning]   = useState(false)
+  const [rerunning, setRerunning]     = useState(false)
   const [rerunResult, setRerunResult] = useState<CreatePackageResult | null>(null)
-  const [rerunErr, setRerunErr]     = useState<string | null>(null)
+  const [rerunErr, setRerunErr]       = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting]           = useState(false)
+  const [deleteErr, setDeleteErr]         = useState<string | null>(null)
+
+  async function handleDelete() {
+    setDeleting(true)
+    setDeleteErr(null)
+    try {
+      await onDelete(pkg.job_id)
+    } catch (e: unknown) {
+      setDeleteErr(e instanceof Error ? e.message : String(e))
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
 
   async function rerun() {
     setRerunning(true)
@@ -173,14 +189,34 @@ export function JobDetail({ pkg, onRefresh }: Props) {
           <button
             className="btn btn--ghost btn--sm"
             onClick={rerun}
-            disabled={rerunning}
+            disabled={rerunning || confirmDelete}
             title="Re-run extraction, fit assessment, and document generation"
           >
             {rerunning ? 'Re-running…' : '↺ Re-run'}
           </button>
+          {confirmDelete ? (
+            <span className="delete-confirm-row">
+              <span className="delete-confirm-label">Delete this job?</span>
+              <button className="btn btn--danger btn--sm" onClick={handleDelete} disabled={deleting}>
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              className="btn btn--ghost-danger btn--sm"
+              onClick={() => setConfirmDelete(true)}
+              disabled={rerunning}
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
+      {deleteErr && <div className="form-error" style={{ margin: '0 0 0.75rem' }}>{deleteErr}</div>}
       {rerunErr && <div className="form-error" style={{ margin: '0 0 0.75rem' }}>{rerunErr}</div>}
       {rerunResult && (
         <RerunResults result={rerunResult} onDismiss={() => setRerunResult(null)} />

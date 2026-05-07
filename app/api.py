@@ -400,6 +400,17 @@ def get_package(job_id: int):
     )
 
 
+@app.delete("/api/jobs/{job_id}", status_code=200)
+def delete_job(job_id: int):
+    with get_conn() as conn:
+        row = conn.execute("SELECT id FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+    return {"ok": True, "deleted_id": job_id}
+
+
 @app.post("/api/jobs/{job_id}/decision")
 def set_decision(job_id: int, body: DecisionIn):
     if body.status not in VALID_STATUSES:

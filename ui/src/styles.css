@@ -1732,6 +1732,19 @@ a { color: #1a5a8a; }
 }
 .btn--danger:hover  { background: #b91c1c; }
 
+/* ── Delete confirm ─────────────────────────────────────────────────────────── */
+
+.delete-confirm-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.delete-confirm-label {
+  font-size: 0.8rem;
+  color: #dc2626;
+  white-space: nowrap;
+}
+
 /* ── Re-run results banner ──────────────────────────────────────────────────── */
 
 .rerun-results {

@@ -69,6 +69,13 @@ export default function App() {
     }
   }
 
+  async function handleDelete(jobId: number) {
+    await api.deleteJob(jobId)
+    setSelectedId(null)
+    setPkg(null)
+    loadJobs()
+  }
+
   function handleJobCreated(result: CreateJobResult) {
     loadJobs().then(() => {
       setSelectedId(result.job_id)
@@ -159,7 +166,7 @@ export default function App() {
             {pkgLoading && <div className="main-loading">Loading…</div>}
             {pkgErr    && <div className="main-error">{pkgErr}</div>}
             {!pkgLoading && !pkgErr && pkg && (
-              <JobDetail pkg={pkg} onRefresh={handleRefresh} />
+              <JobDetail pkg={pkg} onRefresh={handleRefresh} onDelete={handleDelete} />
             )}
             {!pkgLoading && !pkgErr && !pkg && !jobsLoading && (
               <div className="main-empty">

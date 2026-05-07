@@ -422,6 +422,9 @@ export const api = {
   createJobPackage: (payload: CreateJobPayload) =>
     post<CreatePackageResult>('/jobs/create-package', payload),
 
+  deleteJob: (jobId: number) =>
+    del<{ ok: boolean; deleted_id: number }>(`/jobs/${jobId}`),
+
   setDecision: (jobId: number, payload: DecisionPayload) =>
     post<{ ok: boolean; application_id: number }>(`/jobs/${jobId}/decision`, payload),
 
