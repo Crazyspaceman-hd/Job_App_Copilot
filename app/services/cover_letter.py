@@ -60,7 +60,7 @@ from app.services.scorer import (
     _normalize,
     _parse_jd_sections,
 )
-from app.services.resume_tailor import _estimate_yoe_label
+from app.services.resume_tailor import _detect_role_type, _estimate_yoe_label
 
 
 # ── Tuning constants ──────────────────────────────────────────────────────────
@@ -310,15 +310,25 @@ def generate_targeted_cover_letter(
 
     adjacency_para: str | None = None
     if adjacent_only:
-        adj_terms = ", ".join(adjacent_only)
+        adj_terms  = ", ".join(adjacent_only)
+        role_type  = _detect_role_type(job_title, required_skills)
+        adj_context = {
+            "ml":               "applied ML project work",
+            "data_engineering": "adjacent data pipeline projects",
+            "devops":           "infrastructure and deployment work",
+            "frontend":         "full-stack feature work",
+            "fullstack":        "cross-functional project work",
+            "backend":          "production engineering work",
+        }.get(role_type, "production engineering work")
         adjacency_para = (
-            f"I also bring adjacent experience with {adj_terms}. "
-            f"While these are not my primary areas, I have worked alongside them "
-            f"in production contexts and am confident in my ability to ramp up quickly."
+            f"I also bring adjacent experience with {adj_terms}, developed through "
+            f"{adj_context}. While these are not my primary areas, I am confident in "
+            f"my ability to contribute and deepen this experience quickly."
         )
 
     # ── 10. Build opening paragraph ────────────────────────────────────────────
-    opening = _build_opening(profile, job_title, job_company, direct_used, skill_map)
+    role_type = _detect_role_type(job_title, required_skills)
+    opening   = _build_opening(profile, job_title, job_company, direct_used, skill_map, role_type)
 
     # ── 11. Render markdown ────────────────────────────────────────────────────
     markdown = _render_markdown(
@@ -417,18 +427,49 @@ def _score_fragment(
 
 # ── Opening paragraph ─────────────────────────────────────────────────────────
 
+_OPENING_SKILLS_CLAUSE: dict[str, str] = {
+    "ml": (
+        "With {yoe_phrase} of experience designing and deploying production ML systems "
+        "using {skill_phrase}, I bring both the technical depth and the operational "
+        "discipline this role demands."
+    ),
+    "data_engineering": (
+        "With {yoe_phrase} of experience building reliable, observable data pipelines "
+        "with {skill_phrase}, I am well-positioned to contribute to your data infrastructure."
+    ),
+    "devops": (
+        "With {yoe_phrase} of experience building and maintaining cloud infrastructure "
+        "with {skill_phrase}, I bring the reliability engineering mindset this role requires."
+    ),
+    "frontend": (
+        "With {yoe_phrase} of experience delivering accessible, performant user interfaces "
+        "with {skill_phrase}, I am eager to bring this craft to your product."
+    ),
+    "fullstack": (
+        "With {yoe_phrase} of experience shipping end-to-end features using {skill_phrase}, "
+        "I am well-suited to contribute across your stack."
+    ),
+    "backend": (
+        "With {yoe_phrase} of experience building scalable backend systems "
+        "with {skill_phrase}, I am confident I can contribute meaningfully to your team."
+    ),
+}
+
+
 def _build_opening(
     profile:      dict,
     job_title:    str,
     job_company:  str,
     direct_used:  list[str],
     skill_map:    dict[str, str],
+    role_type:    str = "backend",
 ) -> str:
     """
     Build a templated opening paragraph grounded in confirmed profile evidence.
     Never names skills that are unsupported gaps.
+    Varies by role_type so different jobs produce different letters.
     """
-    yoe_label = _estimate_yoe_label(profile)
+    yoe_label  = _estimate_yoe_label(profile)
     yoe_phrase = f"{yoe_label} years" if yoe_label else "several years"
 
     def _display(term: str) -> str:
@@ -442,11 +483,9 @@ def _build_opening(
             skill_phrase = f"{disp[0]} and {disp[1]}"
         else:
             skill_phrase = disp[0]
-        skills_clause = (
-            f" With {yoe_phrase} of experience building production systems "
-            f"with {skill_phrase}, I am confident I can contribute meaningfully "
-            f"to your team."
-        )
+
+        tmpl = _OPENING_SKILLS_CLAUSE.get(role_type, _OPENING_SKILLS_CLAUSE["backend"])
+        skills_clause = " " + tmpl.format(yoe_phrase=yoe_phrase, skill_phrase=skill_phrase)
     else:
         skills_clause = (
             f" With {yoe_phrase} of software engineering experience, "

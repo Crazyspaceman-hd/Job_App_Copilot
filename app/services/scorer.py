@@ -255,6 +255,11 @@ _DISPLAY_TERMS: dict[str, str] = {
 
 # ── Seniority levels ──────────────────────────────────────────────────────────
 
+def _fmt_term(term: str) -> str:
+    """Return a human-readable display name for a normalised vocab term."""
+    return _DISPLAY_TERMS.get(term, term.title() if " " not in term else term.title())
+
+
 _SENIORITY_LEVELS = {
     "junior":    1,
     "mid":       2,
@@ -420,9 +425,9 @@ def assess(
     )
     ats_score = _score_ats(jd_all_skills, skill_map)
 
-    # 4. Rebuild display-friendly strengths (backward-compat; direct first, then labelled adjacent)
-    mh_strengths  = mh_direct  + [f"{s} (adjacent)" for s in mh_adjacent]
-    nth_strengths = nth_direct + [f"{s} (adjacent)" for s in nth_adjacent]
+    # 4. Rebuild display-friendly strengths (direct first; adjacent labeled clearly)
+    mh_strengths  = [_fmt_term(s) for s in mh_direct]
+    nth_strengths = [_fmt_term(s) for s in nth_direct] + [f"{_fmt_term(s)} (adjacent)" for s in nth_adjacent]
 
     # 5. Weighted overall
     overall = (
@@ -440,9 +445,17 @@ def assess(
     # 7. Confidence — based on profile completeness
     confidence = _determine_confidence(profile_complete, must_have_score, jd_required)
 
-    # 8. Aggregate narrative lists
+    # 8. Aggregate narrative lists with strategic gap classification
     strengths = mh_strengths + nth_strengths + dom_strengths + sen_strengths
-    gaps      = mh_gaps + nth_gaps + dom_gaps + sen_gaps
+
+    # Gaps: hard-missing required → under-signaled required → preferred → domain → seniority
+    gaps = (
+        [f"{_fmt_term(t)}: required — no profile evidence" for t in mh_gaps]
+        + [f"{_fmt_term(t)}: required — adjacent evidence only (build a project to strengthen)" for t in mh_adjacent]
+        + [f"{_fmt_term(t)}: preferred — not in profile" for t in nth_gaps]
+        + dom_gaps
+        + sen_gaps
+    )
 
     rationale = _build_rationale(
         must_have_score, jd_required, jd_preferred,
@@ -710,9 +723,10 @@ def _score_domain(
         ev = candidate_domains.get(term) or _lookup_skill(term, candidate_domains)
         if ev and ev in _EVIDENCE_WEIGHT:
             total += _EVIDENCE_WEIGHT[ev]
-            strengths.append(f"domain: {term} ({ev})")
+            label = "direct" if ev == "direct" else "adjacent"
+            strengths.append(f"{_fmt_term(term)}: domain knowledge ({label})")
         else:
-            gaps.append(f"domain: {term} not in profile")
+            gaps.append(f"{_fmt_term(term)}: required domain knowledge — not in profile")
 
     return total / len(jd_domains), strengths, gaps
 
@@ -955,45 +969,53 @@ def _build_rationale(
 ) -> str:
     parts: list[str] = []
 
-    # Note data source
     if using_extracted:
         parts.append(
-            f"[Used structured extraction (extraction confidence: {extraction_confidence or 'unknown'})]"
+            f"[Structured extraction used (confidence: {extraction_confidence or 'unknown'})]"
         )
     else:
-        parts.append("[Used raw-text heuristics — run extract-requirements to improve accuracy]")
+        parts.append("[Raw-text heuristics — run extract-requirements to improve accuracy]")
 
-    # Required skill coverage
+    # Required skill coverage with direct/adjacent breakdown
     if jd_required:
-        hits = sum(1 for t in jd_required if _lookup_skill(t, skill_map))
+        direct_hits   = [t for t in jd_required if _lookup_skill(t, skill_map) == "direct"]
+        adjacent_hits = [t for t in jd_required if _lookup_skill(t, skill_map) in ("adjacent", "familiar")]
+        missing       = [t for t in jd_required if not _lookup_skill(t, skill_map)]
+
         parts.append(
-            f"{hits} of {len(jd_required)} identified required skills found in profile "
-            f"(must-have score: {must_have_score:.0%})."
+            f"{len(direct_hits)}/{len(jd_required)} required skills: "
+            f"{len(direct_hits)} direct, {len(adjacent_hits)} adjacent-only, "
+            f"{len(missing)} missing. Must-have score: {must_have_score:.0%}."
         )
+        if missing:
+            missing_disp = ", ".join(_fmt_term(t) for t in missing[:5])
+            suffix = f" (+{len(missing)-5} more)" if len(missing) > 5 else ""
+            parts.append(f"Missing required: {missing_disp}{suffix}.")
+        if adjacent_hits:
+            adj_disp = ", ".join(_fmt_term(t) for t in adjacent_hits[:4])
+            parts.append(f"Adjacent-only (under-signaled): {adj_disp}.")
     else:
         parts.append(
-            "Could not identify discrete required skills from JD structure; "
+            "Could not identify discrete required skills from JD — "
             "must-have score derived from full-text matching (lower confidence)."
         )
 
     if jd_preferred:
         hits_p = sum(1 for t in jd_preferred if _lookup_skill(t, skill_map))
-        parts.append(
-            f"{hits_p} of {len(jd_preferred)} preferred skills found in profile."
-        )
+        parts.append(f"{hits_p}/{len(jd_preferred)} preferred skills found in profile.")
 
     if red_flags:
-        parts.append("Hard blockers detected: " + "; ".join(red_flags))
+        parts.append("Hard blockers: " + "; ".join(red_flags))
 
     if confidence == "low":
         parts.append(
-            "Confidence is LOW because the candidate profile is largely unfilled. "
-            "Fill in skills, domains, seniority, and work-authorisation to improve accuracy."
+            "LOW confidence — profile largely unfilled. "
+            "Add skills, domains, seniority, and work-authorisation for accurate assessment."
         )
     elif confidence == "medium":
         parts.append(
-            "Confidence is MEDIUM — some profile fields are missing. "
-            "Filling in remaining TODO fields will sharpen the assessment."
+            "MEDIUM confidence — some profile fields missing. "
+            "Fill remaining TODO fields to sharpen the assessment."
         )
 
     parts.append(f"Verdict: {verdict}.")

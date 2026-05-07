@@ -27,6 +27,7 @@ import sqlite3
 from dataclasses import asdict, dataclass, field
 from typing import Optional
 
+from app.services.resume_tailor import _detect_role_type
 from app.services.scorer import (
     _ALL_VOCAB,
     _EVIDENCE_WEIGHT,
@@ -924,10 +925,11 @@ def recommend_project(
     db   = _get_candidate_db(profile)
 
     # ── 6. Build new-project recommendation ───────────────────────────────────
+    role_type = _detect_role_type(job_title, required_skills)
     new_rec = _build_new_project_rec(
         primary_gap, lang, db, skill_map,
-        required_set, preferred_set, direct_list, gaps_list,
-        job_title, job_company,
+        required_set, preferred_set, direct_list, gaps_list, adjacent_list,
+        job_title, job_company, role_type,
     )
 
     # ── 7. Find best reposition candidate ─────────────────────────────────────
@@ -941,7 +943,7 @@ def recommend_project(
         reposition_rec = _build_reposition_rec(
             best_proj, best_matched, primary_gap, lang, db,
             required_set, preferred_set, skill_map,
-            job_title, job_company, direct_list, gaps_list,
+            job_title, job_company, direct_list, gaps_list, role_type,
         )
 
     # ── 8. Build provenance ────────────────────────────────────────────────────
@@ -1136,20 +1138,22 @@ def _build_stack(
 # ── New-project recommendation builder ───────────────────────────────────────
 
 def _build_new_project_rec(
-    primary_gap:  str,
-    lang:         str,
-    db:           str,
-    skill_map:    dict[str, str],
-    required_set: set[str],
+    primary_gap:   str,
+    lang:          str,
+    db:            str,
+    skill_map:     dict[str, str],
+    required_set:  set[str],
     preferred_set: set[str],
-    direct_list:  list[str],
-    gaps_list:    list[str],
-    job_title:    str,
-    job_company:  str,
+    direct_list:   list[str],
+    gaps_list:     list[str],
+    adjacent_list: list[str],
+    job_title:     str,
+    job_company:   str,
+    role_type:     str = "backend",
 ) -> ProjectRecommendation:
     """Build a new-project recommendation from the primary gap and templates."""
-    tmpl     = _GAP_TEMPLATES.get(primary_gap, _DEFAULT_GAP_TEMPLATE)
-    gap_d    = _dn(primary_gap)
+    tmpl      = _GAP_TEMPLATES.get(primary_gap, _DEFAULT_GAP_TEMPLATE)
+    gap_d     = _dn(primary_gap)
     gap_title = gap_d
 
     subs = {"lang": lang, "db": db, "gap": primary_gap, "gap_d": gap_d, "gap_title": gap_title}
@@ -1169,22 +1173,44 @@ def _build_new_project_rec(
 
     stack = _build_stack(lang, db, primary_gap, skill_map, tmpl["stack_additions"], {})
 
-    # Build why_this_matches
-    is_gap     = primary_gap in gaps_list
-    gap_label  = f"unsupported gap" if is_gap else "adjacent-evidence signal"
-    why = (
-        f"{gap_d} is a {gap_label} for {job_title}. "
-        f"Building a tightly scoped {gap_d} project demonstrates exactly what the role "
-        f"needs without fabricating prior experience. "
-    )
+    # Build strategic why_this_matches with career framing
+    is_hard_gap    = primary_gap in gaps_list
+    is_adj_only    = primary_gap in adjacent_list
+    total_gaps     = len(gaps_list)
+    total_adj      = len(adjacent_list)
+
+    if is_hard_gap:
+        gap_type_label = "a required skill with no profile evidence"
+        career_action  = (
+            f"A focused {gap_d} project is the most efficient way to turn this hard gap "
+            f"into direct evidence before the next application cycle."
+        )
+    elif is_adj_only:
+        gap_type_label = "a required skill where your evidence is adjacent-only"
+        career_action  = (
+            f"Sharpening from adjacent to direct evidence here is the single highest-ROI "
+            f"move for this role type — screeners regularly filter on {gap_d} experience."
+        )
+    else:
+        gap_type_label = "a key skill to signal for this role"
+        career_action  = (
+            f"Adding a concrete {gap_d} project strengthens the overall signal "
+            f"for {job_title}-type roles."
+        )
+
+    why = f"{gap_d} is {gap_type_label} for {job_title}. {career_action}"
+
     if direct_list:
         direct_disp = ", ".join(_dn(t) for t in direct_list[:3])
-        why += f"Your direct evidence in {direct_disp} provides the foundation."
+        why += f" Your direct evidence in {direct_disp} gives you the foundation to build this quickly."
+
+    if total_gaps > 1:
+        why += f" (This is the highest-priority gap among the {total_gaps} unsupported required skills.)"
 
     target_gap = (
-        f"Unsupported required skill: {gap_d}"
-        if is_gap
-        else f"Strengthen adjacent evidence: {gap_d}"
+        f"Close hard gap: {gap_d} (required — no evidence)"
+        if is_hard_gap
+        else f"Strengthen adjacent signal: {gap_d}"
     )
 
     return ProjectRecommendation(
@@ -1263,6 +1289,7 @@ def _build_reposition_rec(
     job_company:  str,
     direct_list:  list[str],
     gaps_list:    list[str],
+    role_type:    str = "backend",
 ) -> ProjectRecommendation:
     """Build a 'reposition an existing project' recommendation."""
     proj_title  = project.get("title", "Existing Project")

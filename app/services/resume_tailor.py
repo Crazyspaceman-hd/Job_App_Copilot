@@ -191,11 +191,12 @@ def generate_targeted_resume(
     """
     # ── 1. Load job text ───────────────────────────────────────────────────────
     row = conn.execute(
-        "SELECT raw_text, remote_policy FROM jobs WHERE id = ?", (job_id,)
+        "SELECT raw_text, remote_policy, title FROM jobs WHERE id = ?", (job_id,)
     ).fetchone()
     if not row:
         raise ValueError(f"Job id={job_id} not found in database.")
     job_raw_text = row["raw_text"]
+    job_title    = row["title"] or ""
 
     # ── 2. Resolve term sets ───────────────────────────────────────────────────
     if extracted is not None:
@@ -280,7 +281,7 @@ def generate_targeted_resume(
 
     # ── 8. Generate summary paragraph ─────────────────────────────────────────
     summary = _generate_summary(
-        profile, required_skills, skill_map, direct_used
+        profile, required_skills, skill_map, direct_used, job_title=job_title
     )
 
     # ── 9. Render markdown ────────────────────────────────────────────────────
@@ -458,15 +459,27 @@ def _build_skills_section(
 
 # ── Summary generation ────────────────────────────────────────────────────────
 
+_ROLE_TYPE_FRAMING: dict[str, str] = {
+    "ml":               "building and deploying production ML systems",
+    "data_engineering": "building reliable, observable data pipelines at scale",
+    "devops":           "cloud infrastructure, CI/CD, and reliability engineering",
+    "frontend":         "building responsive, accessible user interfaces",
+    "fullstack":        "delivering end-to-end product features across the stack",
+    "backend":          "designing and scaling backend services and APIs",
+}
+
+
 def _generate_summary(
     profile:            dict,
     required_skills:    list[str],
     skill_map:          dict[str, str],
     direct_evidence:    list[str],
+    job_title:          str = "",
 ) -> str:
     """
     Build a short targeted summary paragraph from profile data + job requirements.
     Uses only confirmed profile data — never fabricates qualifications.
+    Varies framing based on detected role type so summaries differ across job types.
     """
     personal  = profile.get("personal", {})
     targets   = profile.get("job_targets", {})
@@ -478,7 +491,8 @@ def _generate_summary(
         else ""
     )
 
-    yoe_label = _estimate_yoe_label(profile)
+    yoe_label  = _estimate_yoe_label(profile)
+    role_type  = _detect_role_type(job_title, required_skills)
 
     # Top required skills the candidate can actually claim (direct first, then adjacent)
     direct_req   = [s for s in required_skills if _lookup_skill(s, skill_map) == "direct"][:3]
@@ -487,18 +501,16 @@ def _generate_summary(
         if _lookup_skill(s, skill_map) in ("adjacent", "familiar")
     ][:2]
     # Never fall back to raw required_skills — those may be gaps the candidate can't claim.
-    # Use only skills with confirmed profile evidence.
     top_skills = direct_req or direct_evidence[:3]
 
     def _display(term: str) -> str:
         return _DISPLAY_TERMS.get(term, term.title() if " " not in term else term)
 
-    # Build opening line
     seniority_label = seniority.title() if seniority else "Software"
     yoe_phrase      = f" with {yoe_label} years of experience" if yoe_label else ""
+    role_framing    = _ROLE_TYPE_FRAMING.get(role_type, "building production software systems")
 
     if top_skills:
-        # Grammatically join up to 3 terms
         disp = [_display(s) for s in top_skills]
         if len(disp) >= 3:
             skill_phrase = f"{disp[0]}, {disp[1]}, and {disp[2]}"
@@ -514,6 +526,9 @@ def _generate_summary(
         opening = f"{seniority_label} software engineer{yoe_phrase}."
 
     parts = [opening]
+
+    # Role-type framing: makes summaries meaningfully different across job types
+    parts.append(f"Track record of {role_framing}.")
 
     # Supplementary sentence: extra direct-evidence skills not yet mentioned
     extra = [s for s in direct_evidence if s not in top_skills][:4]
@@ -536,6 +551,42 @@ def _generate_summary(
         parts.append(f"Transferable experience with {adj_phrase}.")
 
     return "  ".join(parts)
+
+
+def _detect_role_type(job_title: str, required_skills: list[str]) -> str:
+    """
+    Infer the primary role type from job title + required skills.
+    Returns one of: ml, data_engineering, devops, frontend, fullstack, backend.
+    """
+    title = job_title.lower()
+    if any(k in title for k in ("machine learning", " ml ", "ml engineer", "ai engineer",
+                                 "deep learning", "data scientist", "mlops")):
+        return "ml"
+    if any(k in title for k in ("data engineer", "data platform", "etl", "analytics engineer",
+                                 "data infrastructure")):
+        return "data_engineering"
+    if any(k in title for k in ("devops", "site reliability", " sre", "platform engineer",
+                                 "infrastructure engineer", "cloud engineer")):
+        return "devops"
+    if any(k in title for k in ("frontend", "front-end", "front end", "ui engineer")):
+        return "frontend"
+    if any(k in title for k in ("fullstack", "full-stack", "full stack")):
+        return "fullstack"
+
+    # Infer from required skills when title is ambiguous
+    skill_set = set(required_skills)
+    ml_signals = {"pytorch", "tensorflow", "scikit-learn", "scikit learn", "mlflow",
+                  "machine learning", "deep learning", "hugging face"}
+    de_signals = {"spark", "airflow", "kafka", "dbt", "snowflake", "redshift",
+                  "bigquery", "data engineering", "flink"}
+    ops_signals = {"kubernetes", "terraform", "prometheus", "grafana", "ci/cd", "devops"}
+    if len(skill_set & ml_signals) >= 2:
+        return "ml"
+    if len(skill_set & de_signals) >= 2:
+        return "data_engineering"
+    if len(skill_set & ops_signals) >= 2:
+        return "devops"
+    return "backend"
 
 
 def _estimate_yoe_label(profile: dict) -> str:
