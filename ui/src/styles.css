@@ -1732,3 +1732,140 @@ a { color: #1a5a8a; }
 }
 .btn--danger:hover  { background: #b91c1c; }
 
+/* ── Profile Synthesis — skill chip editor ─────────────────────────────────── */
+
+.synthesis-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  background: #f0f7ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  margin-bottom: 1.1rem;
+  flex-wrap: wrap;
+}
+.synthesis-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.synthesis-status {
+  font-size: 0.82rem;
+  color: #1e40af;
+}
+.synthesis-status--empty {
+  color: #6b7280;
+}
+
+.skill-editor {
+  margin-bottom: 0.9rem;
+}
+.skill-editor > label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+}
+
+.skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.45rem;
+  min-height: 2.4rem;
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  margin-bottom: 0.4rem;
+}
+.skill-chips-empty {
+  font-size: 0.8rem;
+  color: #aaa;
+  padding: 0.1rem 0.2rem;
+  align-self: center;
+}
+
+/* Individual chip */
+.skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.18rem 0.4rem 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.skill-chip--direct {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+.skill-chip--adjacent {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.skill-chip--familiar {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #374151;
+}
+
+.skill-chip-name {
+  font-weight: 500;
+}
+.skill-chip-select {
+  font-size: 0.73rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 0.1rem;
+  outline: none;
+  font-family: inherit;
+}
+.skill-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.12);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.65rem;
+  line-height: 1;
+  padding: 0;
+  margin-left: 0.1rem;
+}
+.skill-chip-remove:hover {
+  background: rgba(0,0,0,0.25);
+}
+
+.skill-add-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.skill-add-input {
+  flex: 1;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.82rem;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-family: inherit;
+  background: #fff;
+  color: #1a1a1a;
+}
+.skill-add-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+

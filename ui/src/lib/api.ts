@@ -69,6 +69,27 @@ export interface DecisionPayload {
   platform?: string
 }
 
+// Profile synthesis types
+export type SkillLevel = 'direct' | 'adjacent' | 'familiar'
+
+export interface SynthesizedSkill {
+  name:    string
+  level:   SkillLevel
+  sources: string[]
+}
+
+export interface SynthesisResult {
+  languages:    SynthesizedSkill[]
+  frameworks:   SynthesizedSkill[]
+  databases:    SynthesizedSkill[]
+  cloud:        SynthesizedSkill[]
+  tools:        SynthesizedSkill[]
+  practices:    SynthesizedSkill[]
+  domains:      SynthesizedSkill[]
+  sources_used: string[]
+  skills_found: number
+}
+
 // Profile types (mirrors candidate_profile.json structure)
 export interface SkillEntry { name: string; years: number; evidence: string }
 export interface DomainEntry { name: string; evidence: string }
@@ -420,6 +441,8 @@ export const api = {
 
   saveProfile: (profile: Omit<CandidateProfile, '_completeness'>) =>
     post<{ ok: boolean; completeness: number }>('/profile', profile),
+
+  synthesizeProfile: () => get<SynthesisResult>('/profile/synthesize'),
 
   // ── Ingestion ──────────────────────────────────────────────────────────────
   getIngestStatus: () => get<IngestStatus>('/ingest/status'),

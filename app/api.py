@@ -787,6 +787,34 @@ def _safe_load_profile_dict() -> dict[str, Any]:
         }
 
 
+@app.get("/api/profile/synthesize")
+def get_profile_synthesis():
+    """
+    Derive structured skill/domain proposals from all user materials in the DB.
+    Pure read — never writes.  Returns a SynthesisResult JSON object.
+    """
+    from app.services.profile_synthesis import synthesize_profile
+    from dataclasses import asdict
+
+    with get_conn() as conn:
+        result = synthesize_profile(conn)
+
+    def _skill(s) -> dict:
+        return {"name": s.name, "level": s.level, "sources": s.sources}
+
+    return {
+        "languages":    [_skill(s) for s in result.languages],
+        "frameworks":   [_skill(s) for s in result.frameworks],
+        "databases":    [_skill(s) for s in result.databases],
+        "cloud":        [_skill(s) for s in result.cloud],
+        "tools":        [_skill(s) for s in result.tools],
+        "practices":    [_skill(s) for s in result.practices],
+        "domains":      [_skill(s) for s in result.domains],
+        "sources_used": result.sources_used,
+        "skills_found": result.skills_found,
+    }
+
+
 @app.get("/api/profile")
 def get_profile():
     data = _safe_load_profile_dict()
